@@ -159,6 +159,10 @@ public class ExecuteDslScripts extends Builder {
         return ignoreExisting;
     }
 
+    public boolean isSimulate() {
+        return simulate;
+    }
+    
     public RemovedJobAction getRemovedJobAction() {
         return removedJobAction;
     }
