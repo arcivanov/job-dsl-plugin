@@ -81,6 +81,8 @@ public class ExecuteDslScripts extends Builder {
 
     private final boolean ignoreExisting;
 
+    private final boolean simulate;
+
     private final RemovedJobAction removedJobAction;
 
     private final RemovedViewAction removedViewAction;
@@ -92,7 +94,7 @@ public class ExecuteDslScripts extends Builder {
     @DataBoundConstructor
     public ExecuteDslScripts(ScriptLocation scriptLocation, boolean ignoreExisting, RemovedJobAction removedJobAction,
                              RemovedViewAction removedViewAction, LookupStrategy lookupStrategy,
-                             String additionalClasspath) {
+                             String additionalClasspath, boolean simulate) {
         // Copy over from embedded object
         this.usingScriptText = scriptLocation == null || scriptLocation.usingScriptText;
         this.targets = scriptLocation == null ? null : scriptLocation.targets;
@@ -102,6 +104,13 @@ public class ExecuteDslScripts extends Builder {
         this.removedViewAction = removedViewAction;
         this.lookupStrategy = lookupStrategy == null ? LookupStrategy.JENKINS_ROOT : lookupStrategy;
         this.additionalClasspath = additionalClasspath;
+        this.simulate = simulate;
+    }
+
+    public ExecuteDslScripts(ScriptLocation scriptLocation, boolean ignoreExisting, RemovedJobAction removedJobAction,
+            RemovedViewAction removedViewAction, LookupStrategy lookupStrategy,
+            String additionalClasspath) {
+        this(scriptLocation, ignoreExisting, removedJobAction, removedViewAction, lookupStrategy, additionalClasspath, false);
     }
 
     public ExecuteDslScripts(ScriptLocation scriptLocation, boolean ignoreExisting, RemovedJobAction removedJobAction,
@@ -127,6 +136,7 @@ public class ExecuteDslScripts extends Builder {
         this.removedViewAction = RemovedViewAction.IGNORE;
         this.lookupStrategy = LookupStrategy.JENKINS_ROOT;
         this.additionalClasspath = null;
+        this.simulate = false;
     }
 
     ExecuteDslScripts() {
@@ -186,7 +196,7 @@ public class ExecuteDslScripts extends Builder {
             env.putAll(build.getBuildVariables());
 
             // We run the DSL, it'll need some way of grabbing a template config.xml and how to save it
-            JenkinsJobManagement jm = new JenkinsJobManagement(listener.getLogger(), env, build, getLookupStrategy());
+            JenkinsJobManagement jm = new JenkinsJobManagement(listener.getLogger(), env, build, getLookupStrategy(), simulate);
 
             ScriptRequestGenerator generator = new ScriptRequestGenerator(build, env);
             try {
@@ -206,6 +216,9 @@ public class ExecuteDslScripts extends Builder {
                     freshConfigFiles.addAll(generatedItems.getConfigFiles());
                 }
 
+                if (simulate) {
+                    return true;
+                }
                 updateTemplates(build, listener, freshJobs);
                 updateGeneratedJobs(build, listener, freshJobs);
                 updateGeneratedViews(build, listener, freshViews);

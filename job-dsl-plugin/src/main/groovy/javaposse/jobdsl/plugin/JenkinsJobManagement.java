@@ -71,13 +71,20 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
     private final EnvVars envVars;
     private final AbstractBuild<?, ?> build;
     private final LookupStrategy lookupStrategy;
+    private final boolean simulate;
 
     public JenkinsJobManagement(PrintStream outputLogger, EnvVars envVars, AbstractBuild<?, ?> build,
-                                LookupStrategy lookupStrategy) {
+                                LookupStrategy lookupStrategy, boolean simulate) {
         super(outputLogger);
         this.envVars = envVars;
         this.build = build;
         this.lookupStrategy = lookupStrategy;
+        this.simulate = simulate;
+    }
+
+    public JenkinsJobManagement(PrintStream outputLogger, EnvVars envVars, AbstractBuild<?, ?> build,
+                                LookupStrategy lookupStrategy) {
+        this(outputLogger, envVars, build, lookupStrategy, false);
     }
 
     public JenkinsJobManagement(PrintStream outputLogger, EnvVars envVars, AbstractBuild<?, ?> build) {
@@ -117,6 +124,11 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
         String jobName = FilenameUtils.getName(path);
         Jenkins.checkGoodName(jobName);
 
+        if (simulate) {
+            getOutputStream().format("Would create or update job '%s' on path '%s' with config:%n%s", jobName, path, config);
+            return true;
+        }
+
         if (item == null) {
             created = createNewItem(path, config);
         } else if (!ignoreExisting) {
@@ -130,6 +142,11 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
         validateUpdateArgs(path, config);
         String viewBaseName = FilenameUtils.getName(path);
         Jenkins.checkGoodName(viewBaseName);
+        if (simulate) {
+            getOutputStream()
+                    .format("Would create or update view '%s' on path '%s' with config:%n%s", viewBaseName, path, config);
+            return;
+        }
         try {
             InputStream inputStream = new ByteArrayInputStream(config.getBytes("UTF-8"));
 
@@ -317,7 +334,12 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
             }
         });
         if (matchingJobs.size() == 1) {
-            renameJob(matchingJobs.iterator().next(), destination);
+            if (simulate) {
+                getOutputStream().format("Would rename job '%s' to '%s'", matchingJobs.iterator().next(), destination);
+            }
+            else {
+                renameJob(matchingJobs.iterator().next(), destination);
+            }
         } else if (matchingJobs.size() > 1) {
             throw new DslException(format(Messages.RenameJobMatching_MultipleJobsFound(), matchingJobs));
         }
