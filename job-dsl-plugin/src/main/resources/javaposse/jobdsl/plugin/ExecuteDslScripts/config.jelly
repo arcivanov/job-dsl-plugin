@@ -23,8 +23,8 @@
      <f:entry title="Action for removed views:" field="removedViewAction">
         <f:select/>
     </f:entry>
-    <f:entry title="Run simulation" field="simulate">
-        <f:checkBox name="simulate" title="Run simulation" checked="${instance.simulate}"
+    <f:entry title="Run simulation:" field="simulate">
+        <f:checkbox name="simulate" title="Run simulation" checked="${instance.simulate}"
                     description="Test specified DSL script by generating configuration but do not actually modify anything"/>
     </f:entry>
 
