@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.helpers
 
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.WithXmlActionSpec
 import javaposse.jobdsl.dsl.helpers.scm.SvnCheckoutStrategy
@@ -10,39 +11,219 @@ import spock.lang.Unroll
 
 class ScmContextSpec extends Specification {
     private static final String GIT_REPO_URL = 'git://github.com/Netflix/curator.git'
-    private static final String HG_REPO_URL = 'http://selenic.com/repo/hello'
 
     JobManagement mockJobManagement = Mock(JobManagement)
-    ScmContext context = new ScmContext(false, [], mockJobManagement)
+    Item item = Mock(Item)
+    ScmContext context = new ScmContext([], mockJobManagement, item)
     Node root = new XmlParser().parse(new StringReader(WithXmlActionSpec.XML))
 
-    def 'base hg configuration'() {
+    def 'call hg simple configuration with deprecated plugin version'() {
+        setup:
+        mockJobManagement.getPluginVersion('mercurial') >> new VersionNumber('1.50')
+
         when:
-        context.hg(HG_REPO_URL)
+        context.hg('http://selenic.com/repo/hello')
 
         then:
-        context.scmNode != null
-        context.scmNode.source[0].text() == HG_REPO_URL
-        context.scmNode.modules[0].text() == ''
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 4
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            clean[0].text() == 'false'
+            branch[0].text() == ''
+        }
+        1 * mockJobManagement.requirePlugin('mercurial')
+        1 * mockJobManagement.logDeprecationWarning('support for Mercurial plugin versions older than 1.50.1')
     }
 
-    def 'hg with branch'() {
-        String branch = 'not-default'
+    def 'call hg simple with branch and deprecated plugin version'() {
+        setup:
+        mockJobManagement.getPluginVersion('mercurial') >> new VersionNumber('1.50')
 
         when:
-        context.hg(HG_REPO_URL, branch)
+        context.hg('http://selenic.com/repo/hello', 'not-default')
 
         then:
-        context.scmNode.branch[0].text() == branch
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 4
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            branch[0].text() == 'not-default'
+            clean[0].text() == 'false'
+        }
+        1 * mockJobManagement.requirePlugin('mercurial')
+        1 * mockJobManagement.logDeprecationWarning('support for Mercurial plugin versions older than 1.50.1')
     }
 
-    def 'duplicate scm calls disallowed'() {
+    def 'call hg simple configuration'() {
+        setup:
+        mockJobManagement.getPluginVersion('mercurial') >> new VersionNumber('1.50.1')
+
         when:
-        context.git(GIT_REPO_URL)
-        context.git(GIT_REPO_URL)
+        context.hg('http://selenic.com/repo/hello')
 
         then:
-        thrown(RuntimeException)
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 7
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            revisionType[0].text() == 'BRANCH'
+            revision[0].text() == 'default'
+            clean[0].text() == 'false'
+            credentialsId[0].text() == ''
+            disableChangeLog[0].text() == 'false'
+        }
+        1 * mockJobManagement.requireMinimumPluginVersion('mercurial', '1.50.1')
+    }
+
+    def 'call hg simple with branch'() {
+        setup:
+        mockJobManagement.getPluginVersion('mercurial') >> new VersionNumber('1.50.1')
+
+        when:
+        context.hg('http://selenic.com/repo/hello', 'not-default')
+
+        then:
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 7
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            revisionType[0].text() == 'BRANCH'
+            revision[0].text() == 'not-default'
+            clean[0].text() == 'false'
+            credentialsId[0].text() == ''
+            disableChangeLog[0].text() == 'false'
+        }
+        1 * mockJobManagement.requireMinimumPluginVersion('mercurial', '1.50.1')
+    }
+
+    def 'call hg without url disallowed'() {
+        when:
+        context.hg(null) {
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call hg branch and tag disallowed'() {
+        when:
+        context.hg('http://selenic.com/repo/hello') {
+            branch('branch')
+            tag('tag')
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call hg with branch'() {
+        when:
+        context.hg('http://selenic.com/repo/hello') {
+            branch('not-default')
+        }
+
+        then:
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 7
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            revisionType[0].text() == 'BRANCH'
+            revision[0].text() == 'not-default'
+            clean[0].text() == 'false'
+            credentialsId[0].text() == ''
+            disableChangeLog[0].text() == 'false'
+        }
+        1 * mockJobManagement.requireMinimumPluginVersion('mercurial', '1.50.1')
+    }
+
+    def 'call hg with tag'() {
+        when:
+        context.hg('http://selenic.com/repo/hello') {
+            tag('not-default')
+        }
+
+        then:
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 7
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            revisionType[0].text() == 'TAG'
+            revision[0].text() == 'not-default'
+            clean[0].text() == 'false'
+            credentialsId[0].text() == ''
+            disableChangeLog[0].text() == 'false'
+        }
+        1 * mockJobManagement.requireMinimumPluginVersion('mercurial', '1.50.1')
+    }
+
+    def 'call hg with all options'() {
+        setup:
+        mockJobManagement.getCredentialsId('user1') >> 'user1-credentials'
+
+        when:
+        context.hg('http://selenic.com/repo/hello') {
+            installation('companyMercurial')
+            credentials('user1')
+            modules('module-2', 'module-3')
+            clean()
+            disableChangeLog()
+            subdirectory('/foo/bar')
+            configure {
+                it << foo('bar')
+            }
+        }
+
+        then:
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 10
+            source[0].text() == 'http://selenic.com/repo/hello'
+            installation[0].text() == 'companyMercurial'
+            modules[0].text() == 'module-2 module-3'
+            revisionType[0].text() == 'BRANCH'
+            revision[0].text() == 'default'
+            clean[0].text() == 'true'
+            credentialsId[0].text() == 'user1-credentials'
+            disableChangeLog[0].text() == 'true'
+            subdir[0].text() == '/foo/bar'
+            foo[0].text() == 'bar'
+        }
+        1 * mockJobManagement.requireMinimumPluginVersion('mercurial', '1.50.1')
+    }
+
+    def 'call hg with default values'() {
+        when:
+        context.hg('http://selenic.com/repo/hello') {
+        }
+
+        then:
+        context.scmNodes[0].@class == 'hudson.plugins.mercurial.MercurialSCM'
+        with(context.scmNodes[0]) {
+            name() == 'scm'
+            children().size() == 7
+            source[0].text() == 'http://selenic.com/repo/hello'
+            modules[0].text() == ''
+            revisionType[0].text() == 'BRANCH'
+            revision[0].text() == 'default'
+            clean[0].text() == 'false'
+            credentialsId[0].text() == ''
+            disableChangeLog[0].text() == 'false'
+        }
+        1 * mockJobManagement.requireMinimumPluginVersion('mercurial', '1.50.1')
     }
 
     def 'call git scm with two remotes'() {
@@ -61,19 +242,20 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs.size() == 1
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'.size() == 2
-        with(context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0]) {
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs.size() == 1
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'.size() == 2
+        with(context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0]) {
             name[0].text() == 'origin'
             url[0].text() == 'https://github.com/jenkinsci/jenkins.git'
             refspec[0].text() == '+refs/heads/master:refs/remotes/origin/master'
         }
-        with(context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[1]) {
+        with(context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[1]) {
             name[0].text() == 'other'
             url[0].text() == 'https://github.com/jenkinsci/job-dsl-plugin.git'
             refspec[0].text() == '+refs/heads/master:refs/remotes/other/master'
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with relativeTargetDir'() {
@@ -86,9 +268,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.relativeTargetDir.size() == 1
-        context.scmNode.relativeTargetDir[0].text() == 'checkout'
+        context.scmNodes[0] != null
+        context.scmNodes[0].relativeTargetDir.size() == 1
+        context.scmNodes[0].relativeTargetDir[0].text() == 'checkout'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second relativeTargetDirs'() {
@@ -102,9 +285,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.relativeTargetDir.size() == 1
-        context.scmNode.relativeTargetDir[0].text() == 'checkout'
+        context.scmNodes[0] != null
+        context.scmNodes[0].relativeTargetDir.size() == 1
+        context.scmNodes[0].relativeTargetDir[0].text() == 'checkout'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with reference'() {
@@ -120,9 +304,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.reference.size() == 1
-        context.scmNode.reference[0].text() == '/foo/bar'
+        context.scmNodes[0] != null
+        context.scmNodes[0].reference.size() == 1
+        context.scmNodes[0].reference[0].text() == '/foo/bar'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second reference'() {
@@ -139,9 +324,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.reference.size() == 1
-        context.scmNode.reference[0].text() == '/foo/baz'
+        context.scmNodes[0] != null
+        context.scmNodes[0].reference.size() == 1
+        context.scmNodes[0].reference[0].text() == '/foo/baz'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with reference, plugin version 2.x'() {
@@ -157,8 +343,8 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             reference.size() == 0
             extensions.size() == 1
             extensions[0].children().size() == 1
@@ -166,6 +352,7 @@ class ScmContextSpec extends Specification {
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].reference[0].value() == '/foo/bar'
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].shallow[0].value() == false
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with shallowClone'() {
@@ -181,9 +368,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.useShallowClone.size() == 1
-        context.scmNode.useShallowClone[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].useShallowClone.size() == 1
+        context.scmNodes[0].useShallowClone[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with shallowClone, no argument'() {
@@ -199,9 +387,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.useShallowClone.size() == 1
-        context.scmNode.useShallowClone[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].useShallowClone.size() == 1
+        context.scmNodes[0].useShallowClone[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second shallowClone'() {
@@ -218,9 +407,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.useShallowClone.size() == 1
-        context.scmNode.useShallowClone[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].useShallowClone.size() == 1
+        context.scmNodes[0].useShallowClone[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with shallowClone, plugin version 2.x'() {
@@ -236,8 +426,8 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             reference.size() == 0
             extensions.size() == 1
             extensions[0].children().size() == 1
@@ -245,6 +435,7 @@ class ScmContextSpec extends Specification {
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].reference[0].value() == ''
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].shallow[0].value() == true
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with cloneTimeout, plugin version 2.x'() {
@@ -261,8 +452,8 @@ class ScmContextSpec extends Specification {
 
         then:
         1 * mockJobManagement.requireMinimumPluginVersion('git', '2.0.0')
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             reference.size() == 0
             extensions.size() == 1
             extensions[0].children().size() == 1
@@ -271,6 +462,7 @@ class ScmContextSpec extends Specification {
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].shallow[0].value() == false
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].timeout[0].value() == 50
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with pruneBranches'() {
@@ -283,9 +475,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.pruneBranches.size() == 1
-        context.scmNode.pruneBranches[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].pruneBranches.size() == 1
+        context.scmNodes[0].pruneBranches[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with pruneBranches, no argument'() {
@@ -298,9 +491,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.pruneBranches.size() == 1
-        context.scmNode.pruneBranches[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].pruneBranches.size() == 1
+        context.scmNodes[0].pruneBranches[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with localBranch'() {
@@ -313,9 +507,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.localBranch.size() == 1
-        context.scmNode.localBranch[0].text() == 'bugfix'
+        context.scmNodes[0] != null
+        context.scmNodes[0].localBranch.size() == 1
+        context.scmNodes[0].localBranch[0].text() == 'bugfix'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with createTag'() {
@@ -328,9 +523,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.skipTag.size() == 1
-        context.scmNode.skipTag[0].text() == 'false'
+        context.scmNodes[0] != null
+        context.scmNodes[0].skipTag.size() == 1
+        context.scmNodes[0].skipTag[0].text() == 'false'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with skipTag, no argument'() {
@@ -343,9 +539,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.skipTag.size() == 1
-        context.scmNode.skipTag[0].text() == 'false'
+        context.scmNodes[0] != null
+        context.scmNodes[0].skipTag.size() == 1
+        context.scmNodes[0].skipTag[0].text() == 'false'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second skipTag'() {
@@ -359,9 +556,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.skipTag.size() == 1
-        context.scmNode.skipTag[0].text() == 'false'
+        context.scmNodes[0] != null
+        context.scmNodes[0].skipTag.size() == 1
+        context.scmNodes[0].skipTag[0].text() == 'false'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with clean'() {
@@ -374,9 +572,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.clean.size() == 1
-        context.scmNode.clean[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].clean.size() == 1
+        context.scmNodes[0].clean[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with clean, no argument'() {
@@ -389,9 +588,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.clean.size() == 1
-        context.scmNode.clean[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].clean.size() == 1
+        context.scmNodes[0].clean[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second clean'() {
@@ -405,9 +605,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.clean.size() == 1
-        context.scmNode.clean[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].clean.size() == 1
+        context.scmNodes[0].clean[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with wipeOutWorkspace'() {
@@ -420,9 +621,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.wipeOutWorkspace.size() == 1
-        context.scmNode.wipeOutWorkspace[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].wipeOutWorkspace.size() == 1
+        context.scmNodes[0].wipeOutWorkspace[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with wipeOutWorkspace, no argument'() {
@@ -435,9 +637,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.wipeOutWorkspace.size() == 1
-        context.scmNode.wipeOutWorkspace[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].wipeOutWorkspace.size() == 1
+        context.scmNodes[0].wipeOutWorkspace[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second wipeOutWorkspace'() {
@@ -451,9 +654,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.wipeOutWorkspace.size() == 1
-        context.scmNode.wipeOutWorkspace[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].wipeOutWorkspace.size() == 1
+        context.scmNodes[0].wipeOutWorkspace[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with remotePoll'() {
@@ -466,9 +670,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.remotePoll.size() == 1
-        context.scmNode.remotePoll[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].remotePoll.size() == 1
+        context.scmNodes[0].remotePoll[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with remotePoll, no argument'() {
@@ -481,9 +686,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.remotePoll.size() == 1
-        context.scmNode.remotePoll[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].remotePoll.size() == 1
+        context.scmNodes[0].remotePoll[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second remotePoll'() {
@@ -497,9 +703,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.remotePoll.size() == 1
-        context.scmNode.remotePoll[0].text() == 'true'
+        context.scmNodes[0] != null
+        context.scmNodes[0].remotePoll.size() == 1
+        context.scmNodes[0].remotePoll[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with no branch'() {
@@ -511,10 +718,11 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.branches.size() == 1
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'.size() == 1
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].text() == '**'
+        context.scmNodes[0] != null
+        context.scmNodes[0].branches.size() == 1
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'.size() == 1
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].text() == '**'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with multiple branches'() {
@@ -528,12 +736,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.branches.size() == 1
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'.size() == 3
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].text() == 'foo'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[1].name[0].text() == 'bar'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[2].name[0].text() == 'test'
+        context.scmNodes[0] != null
+        context.scmNodes[0].branches.size() == 1
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'.size() == 3
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].text() == 'foo'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[1].name[0].text() == 'bar'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[2].name[0].text() == 'test'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with mergeOptions'() {
@@ -549,12 +758,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.userMergeOptions.size() == 1
-        context.scmNode.userMergeOptions[0].mergeRemote.size() == 1
-        context.scmNode.userMergeOptions[0].mergeRemote[0].text() == ''
-        context.scmNode.userMergeOptions[0].mergeTarget.size() == 1
-        context.scmNode.userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
+        context.scmNodes[0] != null
+        context.scmNodes[0].userMergeOptions.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeRemote.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeRemote[0].text() == ''
+        context.scmNodes[0].userMergeOptions[0].mergeTarget.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second mergeOptions'() {
@@ -571,12 +781,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.userMergeOptions.size() == 1
-        context.scmNode.userMergeOptions[0].mergeRemote.size() == 1
-        context.scmNode.userMergeOptions[0].mergeRemote[0].text() == ''
-        context.scmNode.userMergeOptions[0].mergeTarget.size() == 1
-        context.scmNode.userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
+        context.scmNodes[0] != null
+        context.scmNodes[0].userMergeOptions.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeRemote.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeRemote[0].text() == ''
+        context.scmNodes[0].userMergeOptions[0].mergeTarget.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with complex mergeOptions'() {
@@ -596,12 +807,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.userMergeOptions.size() == 1
-        context.scmNode.userMergeOptions[0].mergeRemote.size() == 1
-        context.scmNode.userMergeOptions[0].mergeRemote[0].text() == 'other'
-        context.scmNode.userMergeOptions[0].mergeTarget.size() == 1
-        context.scmNode.userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
+        context.scmNodes[0] != null
+        context.scmNodes[0].userMergeOptions.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeRemote.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeRemote[0].text() == 'other'
+        context.scmNodes[0].userMergeOptions[0].mergeTarget.size() == 1
+        context.scmNodes[0].userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with mergeOptions, plugin version 2.x'() {
@@ -617,10 +829,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.extensions.size() == 1
-        context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 1
-        with(context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
+        context.scmNodes[0] != null
+        context.scmNodes[0].extensions.size() == 1
+        context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 1
+        with(context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
             options.size() == 1
             options[0].children().size() == 3
             options[0].mergeRemote.size() == 1
@@ -630,6 +842,7 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy.size() == 1
             options[0].mergeStrategy[0].text() == 'default'
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with second mergeOptions, plugin version 2.x'() {
@@ -646,10 +859,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.extensions.size() == 1
-        context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 2
-        with(context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
+        context.scmNodes[0] != null
+        context.scmNodes[0].extensions.size() == 1
+        context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 2
+        with(context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
             options.size() == 1
             options[0].children().size() == 3
             options[0].mergeRemote.size() == 1
@@ -659,7 +872,7 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy.size() == 1
             options[0].mergeStrategy[0].text() == 'default'
         }
-        with(context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[1]) {
+        with(context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[1]) {
             options.size() == 1
             options[0].children().size() == 3
             options[0].mergeRemote.size() == 1
@@ -669,6 +882,7 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy.size() == 1
             options[0].mergeStrategy[0].text() == 'default'
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with complex mergeOptions, plugin version 2.x'() {
@@ -688,10 +902,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.extensions.size() == 1
-        context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 1
-        with(context.scmNode.extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
+        context.scmNodes[0] != null
+        context.scmNodes[0].extensions.size() == 1
+        context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 1
+        with(context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
             options.size() == 1
             options[0].children().size() == 3
             options[0].mergeRemote.size() == 1
@@ -701,6 +915,7 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy.size() == 1
             options[0].mergeStrategy[0].text() == 'default'
         }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with inverse build chooser'() {
@@ -715,9 +930,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.buildChooser.size() == 1
-        context.scmNode.buildChooser[0].attribute('class') == 'hudson.plugins.git.util.InverseBuildChooser'
+        context.scmNodes[0] != null
+        context.scmNodes[0].buildChooser.size() == 1
+        context.scmNodes[0].buildChooser[0].attribute('class') == 'hudson.plugins.git.util.InverseBuildChooser'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with ancestry build chooser'() {
@@ -733,12 +949,13 @@ class ScmContextSpec extends Specification {
 
         then:
         1 * mockJobManagement.requireMinimumPluginVersion('git', '2.3.1')
-        context.scmNode != null
-        context.scmNode.buildChooser.size() == 1
-        context.scmNode.buildChooser[0].attribute('class') == 'hudson.plugins.git.util.AncestryBuildChooser'
-        context.scmNode.buildChooser[0].children().size() == 2
-        context.scmNode.buildChooser[0].maximumAgeInDays[0].text() == '5'
-        context.scmNode.buildChooser[0].ancestorCommitSha1[0].text() == 'sha1'
+        context.scmNodes[0] != null
+        context.scmNodes[0].buildChooser.size() == 1
+        context.scmNodes[0].buildChooser[0].attribute('class') == 'hudson.plugins.git.util.AncestryBuildChooser'
+        context.scmNodes[0].buildChooser[0].children().size() == 2
+        context.scmNodes[0].buildChooser[0].maximumAgeInDays[0].text() == '5'
+        context.scmNodes[0].buildChooser[0].ancestorCommitSha1[0].text() == 'sha1'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with gerrit trigger build chooser'() {
@@ -754,12 +971,13 @@ class ScmContextSpec extends Specification {
 
         then:
         1 * mockJobManagement.requireMinimumPluginVersion('gerrit-trigger', '2.0')
-        context.scmNode != null
-        context.scmNode.buildChooser.size() == 1
-        context.scmNode.buildChooser[0].attribute('class') ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].buildChooser.size() == 1
+        context.scmNodes[0].buildChooser[0].attribute('class') ==
                     'com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.GerritTriggerBuildChooser'
-        context.scmNode.buildChooser[0].children().size() == 1
-        context.scmNode.buildChooser[0].separator[0].text() == '#'
+        context.scmNodes[0].buildChooser[0].children().size() == 1
+        context.scmNodes[0].buildChooser[0].separator[0].text() == '#'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with credentials'() {
@@ -775,10 +993,12 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs.size() == 1
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'.size() == 1
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].credentialsId[0].text() == '0815'
+        with(context.scmNodes[0]) {
+            userRemoteConfigs.size() == 1
+            userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'.size() == 1
+            userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].credentialsId[0].text() == '0815'
+        }
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm methods'() {
@@ -786,10 +1006,10 @@ class ScmContextSpec extends Specification {
         context.git(GIT_REPO_URL)
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() == GIT_REPO_URL
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == '**'
-
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() == GIT_REPO_URL
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == '**'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with branch'() {
@@ -797,7 +1017,8 @@ class ScmContextSpec extends Specification {
         context.git(GIT_REPO_URL, 'feature-branch')
 
         then:
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'feature-branch'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'feature-branch'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with stashBrowser'() {
@@ -812,10 +1033,95 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.browser.size() == 1
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.Stash'
-        context.scmNode.browser[0].'url'[0].value() == 'http://stash'
+        context.scmNodes[0] != null
+        context.scmNodes[0].browser.size() == 1
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.Stash'
+        context.scmNodes[0].browser[0].'url'[0].value() == 'http://stash'
+        1 * mockJobManagement.requirePlugin('git')
+    }
+
+    def 'call git scm with ignoreNotifyCommit'() {
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            ignoreNotifyCommit(true)
+        }
+
+        then:
+        context.scmNodes[0] != null
+        context.scmNodes[0].ignoreNotifyCommit.size() == 1
+        context.scmNodes[0].ignoreNotifyCommit[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
+    }
+
+    def 'call git scm with ignoreNotifyCommit, no argument'() {
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            ignoreNotifyCommit()
+        }
+
+        then:
+        context.scmNodes[0] != null
+        context.scmNodes[0].ignoreNotifyCommit.size() == 1
+        context.scmNodes[0].ignoreNotifyCommit[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
+    }
+
+    def 'call git scm with second ignoreNotifyCommit'() {
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            ignoreNotifyCommit(false)
+            ignoreNotifyCommit(true)
+        }
+
+        then:
+        context.scmNodes[0] != null
+        context.scmNodes[0].ignoreNotifyCommit.size() == 1
+        context.scmNodes[0].ignoreNotifyCommit[0].text() == 'true'
+        1 * mockJobManagement.requirePlugin('git')
+    }
+
+    def 'call git scm with recursiveSubmodules with default true'() {
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            recursiveSubmodules()
+        }
+
+        then:
+        with(context.scmNodes[0]) {
+            recursiveSubmodules[0].value() == true
+        }
+        1 * mockJobManagement.requirePlugin('git')
+    }
+
+    def 'call git scm with recursiveSubmodules with param'(boolean value) {
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            recursiveSubmodules(value)
+        }
+
+        then:
+        with(context.scmNodes[0]) {
+            recursiveSubmodules[0].value() == value
+        }
+        1 * mockJobManagement.requirePlugin('git')
+
+        where:
+        value << [true, false]
     }
 
     def 'call git scm with configure appending'() {
@@ -829,12 +1135,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode.authorOrCommitter.size() == 2
-        context.scmNode.authorOrCommitter[0].text() == 'false'
-        context.scmNode.authorOrCommitter[1].text() == 'true'
-        context.scmNode.gitTool.size() == 2
-        context.scmNode.gitTool[0].text() == 'Default'
-        context.scmNode.gitTool[1].text() == 'NotDefault'
+        context.scmNodes[0].authorOrCommitter.size() == 2
+        context.scmNodes[0].authorOrCommitter[0].text() == 'false'
+        context.scmNodes[0].authorOrCommitter[1].text() == 'true'
+        context.scmNodes[0].gitTool.size() == 2
+        context.scmNodes[0].gitTool[0].text() == 'Default'
+        context.scmNodes[0].gitTool[1].text() == 'NotDefault'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call git scm with configure on Node'() {
@@ -846,12 +1153,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode.gitConfigName.size() == 1
-        context.scmNode.gitConfigName[0].text() == 'john'
-        context.scmNode.gitConfigEmail.size() == 1
-        context.scmNode.gitConfigEmail[0].text() == 'john@gmail.com'
-        context.scmNode.scmName.size() == 1
-        context.scmNode.scmName[0].text() == 'Kittner'
+        context.scmNodes[0].gitConfigName.size() == 1
+        context.scmNodes[0].gitConfigName[0].text() == 'john'
+        context.scmNodes[0].gitConfigEmail.size() == 1
+        context.scmNodes[0].gitConfigEmail[0].text() == 'john@gmail.com'
+        context.scmNodes[0].scmName.size() == 1
+        context.scmNodes[0].scmName[0].text() == 'Kittner'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call github scm method'() {
@@ -859,13 +1167,14 @@ class ScmContextSpec extends Specification {
         context.github('jenkinsci/job-dsl-plugin')
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
                 'https://github.com/jenkinsci/job-dsl-plugin.git'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == '**'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == '**'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
+        1 * mockJobManagement.requirePlugin('git')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -880,7 +1189,8 @@ class ScmContextSpec extends Specification {
         context.github('jenkinsci/job-dsl-plugin', 'master')
 
         then:
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call github scm method with ssh protocol'() {
@@ -888,13 +1198,14 @@ class ScmContextSpec extends Specification {
         context.github('jenkinsci/job-dsl-plugin', 'master', 'ssh')
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
                 'git@github.com:jenkinsci/job-dsl-plugin.git'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
+        1 * mockJobManagement.requirePlugin('git')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -909,13 +1220,14 @@ class ScmContextSpec extends Specification {
         context.github('jenkinsci/job-dsl-plugin', 'master', 'git')
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
                 'git://github.com/jenkinsci/job-dsl-plugin.git'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
+        1 * mockJobManagement.requirePlugin('git')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -938,13 +1250,14 @@ class ScmContextSpec extends Specification {
         context.github('jenkinsci/job-dsl-plugin', 'master', 'ssh', 'github.acme.com')
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
                 'git@github.acme.com:jenkinsci/job-dsl-plugin.git'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.acme.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.acme.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
+        1 * mockJobManagement.requirePlugin('git')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -961,10 +1274,11 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode.gitConfigName.size() == 1
-        context.scmNode.gitConfigName[0].text() == 'john'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].gitConfigName.size() == 1
+        context.scmNodes[0].gitConfigName[0].text() == 'john'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call github scm with branch and closure'() {
@@ -974,11 +1288,12 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
-        context.scmNode.gitConfigName.size() == 1
-        context.scmNode.gitConfigName[0].text() == 'john'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].gitConfigName.size() == 1
+        context.scmNodes[0].gitConfigName[0].text() == 'john'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call github scm with branch, protocol and closure'() {
@@ -988,13 +1303,14 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
                 'git@github.com:jenkinsci/job-dsl-plugin.git'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
-        context.scmNode.gitConfigName.size() == 1
-        context.scmNode.gitConfigName[0].text() == 'john'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].gitConfigName.size() == 1
+        context.scmNodes[0].gitConfigName[0].text() == 'john'
+        1 * mockJobManagement.requirePlugin('git')
     }
 
     def 'call github scm method with protocol, host and closure '() {
@@ -1004,15 +1320,16 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() ==
                 'git@github.acme.com:jenkinsci/job-dsl-plugin.git'
-        context.scmNode.branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
-        context.scmNode.browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
-        context.scmNode.browser[0].url[0].value() == 'https://github.acme.com/jenkinsci/job-dsl-plugin/'
-        context.scmNode.gitConfigName.size() == 1
-        context.scmNode.gitConfigName[0].text() == 'john'
+        context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
+        context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
+        context.scmNodes[0].browser[0].url[0].value() == 'https://github.acme.com/jenkinsci/job-dsl-plugin/'
+        context.scmNodes[0].gitConfigName.size() == 1
+        context.scmNodes[0].gitConfigName[0].text() == 'john'
         context.withXmlActions.size() == 1
+        1 * mockJobManagement.requirePlugin('git')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -1029,12 +1346,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.attributes()['class'] == 'hudson.scm.SubversionSCM'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() ==
+        context.scmNodes[0] != null
+        context.scmNodes[0].attributes()['class'] == 'hudson.scm.SubversionSCM'
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() ==
                 'http://svn.apache.org/repos/asf/xml/crimson/trunk/'
-        context.scmNode.excludedRegions.size() == 1
-        context.scmNode.excludedRegions[0].value() == '/trunk/.*'
+        context.scmNodes[0].excludedRegions.size() == 1
+        context.scmNodes[0].excludedRegions[0].value() == '/trunk/.*'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with remote and local'() {
@@ -1042,7 +1360,10 @@ class ScmContextSpec extends Specification {
         context.svn('http://svn.apache.org/repos/asf/xml/crimson/trunk/', '/mydir/mycode')
 
         then:
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '/mydir/mycode'
+        with(context.scmNodes[0]) {
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '/mydir/mycode'
+        }
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with browser - Fisheye example'() {
@@ -1055,10 +1376,11 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.browser[0].attributes()['class'] == 'hudson.scm.browsers.FishEyeSVN'
-        context.scmNode.browser[0].url[0].value() == 'http://mycompany.com/fisheye/repo_name'
-        context.scmNode.browser[0].rootModule[0].value() == 'my_root_module'
+        context.scmNodes[0] != null
+        context.scmNodes[0].browser[0].attributes()['class'] == 'hudson.scm.browsers.FishEyeSVN'
+        context.scmNodes[0].browser[0].url[0].value() == 'http://mycompany.com/fisheye/repo_name'
+        context.scmNodes[0].browser[0].rootModule[0].value() == 'my_root_module'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with browser - ViewSVN example'() {
@@ -1068,9 +1390,10 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.browser[0].attributes()['class'] == 'hudson.scm.browsers.ViewSVN'
-        context.scmNode.browser[0].url[0].value() == 'http://mycompany.com/viewsvn/repo_name'
+        context.scmNodes[0] != null
+        context.scmNodes[0].browser[0].attributes()['class'] == 'hudson.scm.browsers.ViewSVN'
+        context.scmNodes[0].browser[0].url[0].value() == 'http://mycompany.com/viewsvn/repo_name'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with no locations'() {
@@ -1091,12 +1414,15 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 1
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].children().size() == 3
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == 'dir'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].depthOption[0].value() == 'infinity'
+        isValidSvnScmNode(context.scmNodes[0])
+        with(context.scmNodes[0]) {
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 1
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].children().size() == 3
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url'
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == 'dir'
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].depthOption[0].value() == 'infinity'
+        }
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with credentials'() {
@@ -1111,12 +1437,15 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 1
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '.'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].credentialsId[0].value() == '4711'
+        isValidSvnScmNode(context.scmNodes[0])
+        with(context.scmNodes[0]) {
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 1
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url'
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '.'
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].credentialsId[0].value() == '4711'
+        }
         1 * mockJobManagement.requireMinimumPluginVersion('subversion', '2.0')
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with multiple locations'() {
@@ -1129,12 +1458,13 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 2
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url1'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '.'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[1].remote[0].value() == 'url2'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[1].local[0].value() == 'dir2'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 2
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url1'
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '.'
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[1].remote[0].value() == 'url2'
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[1].local[0].value() == 'dir2'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn without specifying a local dir for the location'() {
@@ -1144,10 +1474,11 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 1
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url'
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '.'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'.size() == 1
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].remote[0].value() == 'url'
+        context.scmNodes[0].locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].local[0].value() == '.'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     @Unroll
@@ -1160,8 +1491,11 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].depthOption[0].value() == xmlValue
+        isValidSvnScmNode(context.scmNodes[0])
+        with(context.scmNodes[0]) {
+            locations[0].'hudson.scm.SubversionSCM_-ModuleLocation'[0].depthOption[0].value() == xmlValue
+        }
+        1 * mockJobManagement.requirePlugin('subversion')
 
         where:
         depth              || xmlValue
@@ -1179,8 +1513,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.workspaceUpdater[0].attributes()['class'] == 'hudson.scm.subversion.UpdateUpdater'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].workspaceUpdater[0].attributes()['class'] == 'hudson.scm.subversion.UpdateUpdater'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with checkout strategy'() {
@@ -1191,8 +1526,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.workspaceUpdater[0].attributes()['class'] == workspaceUpdaterClass
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].workspaceUpdater[0].attributes()['class'] == workspaceUpdaterClass
+        1 * mockJobManagement.requirePlugin('subversion')
 
         where:
         strategy                               | workspaceUpdaterClass
@@ -1209,8 +1545,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedRegions[0].value() == ''
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedRegions[0].value() == ''
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with single excluded region'() {
@@ -1221,8 +1558,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedRegions[0].value() == 'exreg'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedRegions[0].value() == 'exreg'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with multiple excluded regions'() {
@@ -1234,8 +1572,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedRegions[0].value() == 'exreg1\nexreg2'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedRegions[0].value() == 'exreg1\nexreg2'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with a list of excluded regions'() {
@@ -1247,8 +1586,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedRegions[0].value() == 'exreg1\nexreg2\nexreg3\nexreg4'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedRegions[0].value() == 'exreg1\nexreg2\nexreg3\nexreg4'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn without included regions'() {
@@ -1258,8 +1598,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.includedRegions[0].value() == ''
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].includedRegions[0].value() == ''
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with single included region'() {
@@ -1270,8 +1611,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.includedRegions[0].value() == 'increg'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].includedRegions[0].value() == 'increg'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with multiple included regions'() {
@@ -1283,8 +1625,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.includedRegions[0].value() == 'increg1\nincreg2'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].includedRegions[0].value() == 'increg1\nincreg2'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with a list of included regions'() {
@@ -1296,8 +1639,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.includedRegions[0].value() == 'increg1\nincreg2\nincreg3\nincreg4'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].includedRegions[0].value() == 'increg1\nincreg2\nincreg3\nincreg4'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn without excluded users'() {
@@ -1307,8 +1651,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedUsers[0].value() == ''
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedUsers[0].value() == ''
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with single excluded user'() {
@@ -1319,8 +1664,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedUsers[0].value() == 'user'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedUsers[0].value() == 'user'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with multiple excluded users'() {
@@ -1332,8 +1678,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedUsers[0].value() == 'user1\nuser2'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedUsers[0].value() == 'user1\nuser2'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with a list of excluded users'() {
@@ -1345,8 +1692,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedUsers[0].value() == 'user1\nuser2\nuser3\nuser4'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedUsers[0].value() == 'user1\nuser2\nuser3\nuser4'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn without excluded commit messages'() {
@@ -1356,8 +1704,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedCommitMessages[0].value() == ''
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedCommitMessages[0].value() == ''
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with single excluded commit message'() {
@@ -1368,8 +1717,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedCommitMessages[0].value() == 'commit'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedCommitMessages[0].value() == 'commit'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with multiple excluded commit messages'() {
@@ -1381,8 +1731,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedCommitMessages[0].value() == 'commit1\ncommit2'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedCommitMessages[0].value() == 'commit1\ncommit2'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with a list of excluded commit messages'() {
@@ -1394,8 +1745,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedCommitMessages[0].value() == 'commit1\ncommit2\ncommit3\ncommit4'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedCommitMessages[0].value() == 'commit1\ncommit2\ncommit3\ncommit4'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with a mix of excluded commit message specifications'() {
@@ -1407,8 +1759,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedCommitMessages[0].value() == 'commit1\ncommit2\ncommit3'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedCommitMessages[0].value() == 'commit1\ncommit2\ncommit3'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn without excluded revprop'() {
@@ -1418,8 +1771,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedRevprop[0].value() == ''
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedRevprop[0].value() == ''
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with an excluded revprop'() {
@@ -1430,8 +1784,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.excludedRevprop[0].value() == 'revprop'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].excludedRevprop[0].value() == 'revprop'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     def 'call svn with configure'() {
@@ -1444,8 +1799,9 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        isValidSvnScmNode(context.scmNode)
-        context.scmNode.testNode[0].value() == 'testValue'
+        isValidSvnScmNode(context.scmNodes[0])
+        context.scmNodes[0].testNode[0].value() == 'testValue'
+        1 * mockJobManagement.requirePlugin('subversion')
     }
 
     private static void isValidSvnScmNode(scmNode) {
@@ -1464,15 +1820,16 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        context.scmNode.attributes()['class'] == 'hudson.plugins.perforce.PerforceSCM'
-        context.scmNode.p4User[0].value() == 'roleoe'
-        context.scmNode.p4Passwd[0].value() == '0f0kqlwajkEPwz8Yp+A=' // Using PerforcePasswordEncryptor
-        context.scmNode.p4Port[0].value() == 'perforce:1666'
-        context.scmNode.alwaysForceSync.size() == 1 // Double check there's only one
-        context.scmNode.alwaysForceSync[0].value() == 'true'
-        context.scmNode.projectPath.size() == 1
-        context.scmNode.projectPath[0].value().contains('//depot')
+        context.scmNodes[0] != null
+        context.scmNodes[0].attributes()['class'] == 'hudson.plugins.perforce.PerforceSCM'
+        context.scmNodes[0].p4User[0].value() == 'roleoe'
+        context.scmNodes[0].p4Passwd[0].value() == '0f0kqlwajkEPwz8Yp+A=' // Using PerforcePasswordEncryptor
+        context.scmNodes[0].p4Port[0].value() == 'perforce:1666'
+        context.scmNodes[0].alwaysForceSync.size() == 1 // Double check there's only one
+        context.scmNodes[0].alwaysForceSync[0].value() == 'true'
+        context.scmNodes[0].projectPath.size() == 1
+        context.scmNodes[0].projectPath[0].value().contains('//depot')
+        1 * mockJobManagement.requirePlugin('perforce')
     }
 
     def 'call p4 with few parameters'() {
@@ -1483,13 +1840,14 @@ class ScmContextSpec extends Specification {
         context.p4(viewspec)
 
         then:
-        context.scmNode != null
-        context.scmNode.p4User[0].value() == 'rolem'
-        context.scmNode.p4Passwd[0].value() == ''
-        context.scmNode.p4Port[0].value() == 'perforce:1666'
-        context.scmNode.alwaysForceSync[0].value() == 'false'
-        context.scmNode.projectPath.size() == 1
-        context.scmNode.projectPath[0].value().contains('//depot')
+        context.scmNodes[0] != null
+        context.scmNodes[0].p4User[0].value() == 'rolem'
+        context.scmNodes[0].p4Passwd[0].value() == ''
+        context.scmNodes[0].p4Port[0].value() == 'perforce:1666'
+        context.scmNodes[0].alwaysForceSync[0].value() == 'false'
+        context.scmNodes[0].projectPath.size() == 1
+        context.scmNodes[0].projectPath[0].value().contains('//depot')
+        1 * mockJobManagement.requirePlugin('perforce')
     }
 
     def 'call cloneWorkspace'(parentJob, criteria) {
@@ -1497,8 +1855,9 @@ class ScmContextSpec extends Specification {
         context.cloneWorkspace(parentJob, criteria)
 
         then:
-        context.scmNode.parentJobName.text() == parentJob
-        context.scmNode.criteria.text() == criteria
+        context.scmNodes[0].parentJobName.text() == parentJob
+        context.scmNodes[0].criteria.text() == criteria
+        1 * mockJobManagement.requirePlugin('clone-workspace-scm')
 
         where:
         parentJob | criteria
@@ -1511,8 +1870,8 @@ class ScmContextSpec extends Specification {
         context.baseClearCase()
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             attributes()['class'] == 'hudson.plugins.clearcase.ClearCaseSCM'
             changeset[0].value() == 'BRANCH'
             createDynView[0].value() == false
@@ -1542,6 +1901,7 @@ class ScmContextSpec extends Specification {
             refreshConfigSpecCommand[0].value() == ''
             useTimeRule[0].value() == false
         }
+        1 * mockJobManagement.requirePlugin('clearcase')
     }
 
     def 'call baseClearCase with all configuration parameters'() {
@@ -1558,8 +1918,8 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             attributes()['class'] == 'hudson.plugins.clearcase.ClearCaseSCM'
             changeset[0].value() == 'BRANCH'
             createDynView[0].value() == false
@@ -1590,6 +1950,7 @@ class ScmContextSpec extends Specification {
             refreshConfigSpecCommand[0].value() == ''
             useTimeRule[0].value() == false
         }
+        1 * mockJobManagement.requirePlugin('clearcase')
     }
 
     def 'call rtc without build definition or workspace'() {
@@ -1608,8 +1969,8 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             attributes()['class'] == 'com.ibm.team.build.internal.hjplugin.RTCScm'
             children().size() == 5
             overrideGlobal[0].value() == false
@@ -1618,6 +1979,7 @@ class ScmContextSpec extends Specification {
             buildDefinition[0].value() == 'buildDEF'
             avoidUsingToolkit[0].value() == false
         }
+        1 * mockJobManagement.requirePlugin('teamconcert')
     }
 
     def 'call rtc with build workspace'() {
@@ -1627,8 +1989,8 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             attributes()['class'] == 'com.ibm.team.build.internal.hjplugin.RTCScm'
             children().size() == 5
             overrideGlobal[0].value() == false
@@ -1637,6 +1999,7 @@ class ScmContextSpec extends Specification {
             buildWorkspace[0].value() == 'buildWS'
             avoidUsingToolkit[0].value() == false
         }
+        1 * mockJobManagement.requirePlugin('teamconcert')
     }
 
     def 'call rtc with connection override'() {
@@ -1650,8 +2013,8 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        context.scmNode != null
-        with(context.scmNode) {
+        context.scmNodes[0] != null
+        with(context.scmNodes[0]) {
             attributes()['class'] == 'com.ibm.team.build.internal.hjplugin.RTCScm'
             children().size() == 8
             overrideGlobal[0].value() == true
@@ -1663,18 +2026,6 @@ class ScmContextSpec extends Specification {
             buildDefinition[0].value() == 'buildDEF'
             avoidUsingToolkit[0].value() == false
         }
-    }
-
-    def 'rtc validates single SCM'() {
-        when:
-        context.rtc {
-            buildDefinition('foo')
-        }
-        context.rtc {
-            buildDefinition('bar')
-        }
-
-        then:
-        thrown(IllegalStateException)
+        1 * mockJobManagement.requirePlugin('teamconcert')
     }
 }

@@ -1,62 +1,27 @@
 package javaposse.jobdsl.dsl.helpers
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 
 import static com.google.common.base.Preconditions.checkArgument
 import static com.google.common.base.Preconditions.checkNotNull
+import static java.util.UUID.randomUUID
 
-class BuildParametersContext implements Context {
+class BuildParametersContext extends AbstractContext {
     Map<String, Node> buildParameterNodes = [:]
 
-    /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <parameterDefinitions>
-     *                 <hudson.model.BooleanParameterDefinition>
-     *                     <name>booleanValue</name>
-     *                     <description>ths description of the boolean value</description>
-     *                     <defaultValue>true</defaultValue>
-     *                 </hudson.model.BooleanParameterDefinition>
-     *
-     * @param parameterName name of the parameter
-     * @param defaultValue "false" if not specified
-     * @param description (optional)
-     * @return
-     */
+    BuildParametersContext(JobManagement jobManagement) {
+        super(jobManagement)
+    }
+
     void booleanParam(String parameterName, boolean defaultValue = false, String description = null) {
         simpleParam('hudson.model.BooleanParameterDefinition', parameterName, defaultValue, description)
     }
 
-    /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <parameterDefinitions>
-     *                 <hudson.scm.listtagsparameter.ListSubversionTagsParameterDefinition>
-     *                     <name>listSvnTagsValue</name>
-     *                     <description>Select a Subversion entry</description>
-     *                     <tagsDir>http://kenai.com/svn</tagsDir>
-     *                     <tagsFilter>theTagFilterRegex</tagsFilter>
-     *                     <reverseByDate>true</reverseByDate>
-     *                     <reverseByName>true</reverseByName>
-     *                     <defaultValue>theDefaultValue</defaultValue>
-     *                     <maxTags>maxTagsToDisplayValue</maxTags>
-     *                     <uuid>e434beb2-10dd-4444-a054-44fec8c86ff8</uuid>
-     *                 </hudson.scm.listtagsparameter.ListSubversionTagsParameterDefinition>
-     *
-     * @param parameterName
-     * @param scmUrl
-     * @param tagFilterRegex
-     * @param sortNewestFirst (default = "false")
-     * @param sortZtoA (default = "false")
-     * @param maxTagsToDisplay (optional - "all" if not specified)
-     * @param defaultValue (optional)
-     * @param description (optional)
-     * @return
-     */
+    @RequiresPlugin(id = 'subversion')
     void listTagsParam(String parameterName, String scmUrl, String tagFilterRegex, boolean sortNewestFirst = false,
                       boolean sortZtoA = false, String maxTagsToDisplay = 'all', String defaultValue = null,
                       String description = null) {
@@ -65,13 +30,11 @@ class BuildParametersContext implements Context {
         checkArgument(parameterName.length() > 0)
         checkNotNull(scmUrl, 'scmUrl cannot be null')
         checkArgument(scmUrl.length() > 0)
-        checkNotNull(tagFilterRegex, 'tagFilterRegex cannot be null')
-        checkArgument(tagFilterRegex.length() > 0)
 
         Node definitionNode = new Node(null, 'hudson.scm.listtagsparameter.ListSubversionTagsParameterDefinition')
         definitionNode.appendNode('name', parameterName)
         definitionNode.appendNode('tagsDir', scmUrl)
-        definitionNode.appendNode('tagsFilter', tagFilterRegex)
+        definitionNode.appendNode('tagsFilter', tagFilterRegex ?: '')
         definitionNode.appendNode('reverseByDate', sortNewestFirst)
         definitionNode.appendNode('reverseByName', sortZtoA)
         definitionNode.appendNode('maxTags', maxTagsToDisplay)
@@ -86,28 +49,6 @@ class BuildParametersContext implements Context {
         buildParameterNodes[parameterName] = definitionNode
     }
 
-    /**
-     * <project>
-     *   <properties>
-     *     <hudson.model.ParametersDefinitionProperty>
-     *       <parameterDefinitions>
-     *         <hudson.model.ChoiceParameterDefinition>
-     *           <name>choice</name>
-     *           <description>test</description>
-     *           <choices class="java.util.Arrays$ArrayList">
-     *             <a class="string-array">
-     *               <string>one</string>
-     *               <string>two</string>
-     *               <string>three</string>
-     *             </a>
-     *           </choices>
-     *         </hudson.model.ChoiceParameterDefinition>
-     *
-     * @param parameterName
-     * @param options {choiceA_Default, choiceB, choiceC}
-     * @param description (optional)
-     * @return
-     */
     void choiceParam(String parameterName, List<String> options, String description = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
         checkNotNull(parameterName, 'parameterName cannot be null')
@@ -132,21 +73,6 @@ class BuildParametersContext implements Context {
         buildParameterNodes[parameterName] = definitionNode
     }
 
-    /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <parameterDefinitions>
-     *                 <hudson.model.FileParameterDefinition>
-     *                     <name>test/upload.zip</name>
-     *                     <description>lalala</description>
-     *                 </hudson.model.FileParameterDefinition>
-     *
-     * @param parameterName
-     * @param fileLocation_relativeToTheWorkspace
-     * @param description (optional)
-     * @return
-     */
     void fileParam(String fileLocation, String description = null) {
         checkArgument(!buildParameterNodes.containsKey(fileLocation), 'parameter $fileLocation already defined')
         checkNotNull(fileLocation, 'fileLocation cannot be null')
@@ -161,23 +87,6 @@ class BuildParametersContext implements Context {
         buildParameterNodes[fileLocation] = definitionNode
     }
 
-    /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <hudson.model.RunParameterDefinition>
-     *                 <name>runValue</name>
-     *                 <projectName>2</projectName>
-     *                 <description>the description of the run value</description>
-     *                 <filter>SUCCESSFUL</filter>
-     *         </hudson.model.RunParameterDefinition>
-     *
-     * @param parameterName
-     * @param jobToRun
-     * @param description (optional)
-     * @param filter (optional, one of "ALL", "COMPLETED", "SUCCESSFUL" or "STABLE")
-     * @return
-     */
     void runParam(String parameterName, String jobToRun, String description = null, String filter = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
         checkNotNull(parameterName, 'parameterName cannot be null')
@@ -199,15 +108,9 @@ class BuildParametersContext implements Context {
     }
 
     /**
-     * <org.jvnet.jenkins.plugins.nodelabelparameter.LabelParameterDefinition>
-     *     <name></name>
-     *     <description></description>
-     *     <defaultValue></defaultValue>
-     *     <allNodesMatchingLabel>false</allNodesMatchingLabel>
-     *     <triggerIfResult>allCases</triggerIfResult>
-     *     <nodeEligibility class="org.jvnet.jenkins.plugins.nodelabelparameter.node.AllNodeEligibility"/>
-     * </org.jvnet.jenkins.plugins.nodelabelparameter.LabelParameterDefinition>
+     * @since 1.30
      */
+    @RequiresPlugin(id = 'nodelabelparameter')
     void labelParam(String parameterName, @DslContext(LabelParamContext) Closure labelParamClosure = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
         checkNotNull(parameterName, 'parameterName cannot be null')
@@ -228,31 +131,9 @@ class BuildParametersContext implements Context {
     }
 
     /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <parameterDefinitions>
-     *               <org.jvnet.jenkins.plugins.nodelabelparameter.NodeParameterDefinition>
-     *                   <name></name>
-     *                   <description></description>
-     *                   <allowedSlaves>
-     *                       <string>nodeName</string>
-     *                   </allowedSlaves>
-     *                   <defaultSlaves>
-     *                       <string>nodeName</string>
-     *                   </defaultSlaves>
-     *                   <triggerIfResult>allCases</triggerIfResult>
-     *                   <allowMultiNodeSelection>true</allowMultiNodeSelection>
-     *                   <triggerConcurrentBuilds>false</triggerConcurrentBuilds>
-     *                   <ignoreOfflineNodes>false</ignoreOfflineNodes>
-     *                   <nodeEligibility class="org.jvnet.jenkins.plugins.nodelabelparameter.node.AllNodeEligibility"/>
-     *               </org.jvnet.jenkins.plugins.nodelabelparameter.NodeParameterDefinition>
-     *
-     * @param parameterName
-     * @param allowedNodes
-     * @param description (optional)
-     * @return
+     * @since 1.26
      */
+    @RequiresPlugin(id = 'nodelabelparameter')
     void nodeParam(String parameterName, @DslContext(NodeParamContext) Closure nodeParamClosure = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
         checkNotNull(parameterName, 'parameterName cannot be null')
@@ -280,41 +161,34 @@ class BuildParametersContext implements Context {
     }
 
     /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <parameterDefinitions>
-     *                 <hudson.model.StringParameterDefinition>
-     *                     <name>stringValue</name>
-     *                     <description>the description of the string value</description>
-     *                     <defaultValue>theDefaultStringValue</defaultValue>
-     *                 </hudson.model.StringParameterDefinition>
-     *
-     * @param parameterName
-     * @param defaultValue (optional)
-     * @param description (optional)
-     * @return
+     * @since 1.31
      */
+    @RequiresPlugin(id = 'git-parameter', minimumVersion = '0.4.0')
+    void gitParam(String parameterName, @DslContext(GitParamContext) Closure closure = null) {
+        checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
+        checkNotNull(parameterName, 'parameterName cannot be null')
+        checkArgument(parameterName.length() > 0)
+
+        GitParamContext context = new GitParamContext()
+        ContextHelper.executeInContext(closure, context)
+
+        buildParameterNodes[parameterName] = NodeBuilder.newInstance().
+                'net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition' {
+                    name(parameterName)
+                    description(context.description ?: '')
+                    uuid(randomUUID().toString())
+                    type("PT_$context.type")
+                    branch(context.branch ?: '')
+                    tagFilter(context.tagFilter ?: '')
+                    sortMode(context.sortMode)
+                    defaultValue(context.defaultValue ?: '')
+                }
+    }
+
     void stringParam(String parameterName, String defaultValue = null, String description = null) {
         simpleParam('hudson.model.StringParameterDefinition', parameterName, defaultValue, description)
     }
 
-    /**
-     * <project>
-     *     <properties>
-     *         <hudson.model.ParametersDefinitionProperty>
-     *             <parameterDefinitions>
-     *                 <hudson.model.TextParameterDefinition>
-     *                     <name>textValue</name>
-     *                     <description>the description of the text value</description>
-     *                     <defaultValue>defaultTextValue</defaultValue>
-     *                 </hudson.model.TextParameterDefinition>
-     *
-     * @param parameterName
-     * @param defaultValue (optional)
-     * @param description (optional)
-     * @return
-     */
     void textParam(String parameterName, String defaultValue = null, String description = null) {
         simpleParam('hudson.model.TextParameterDefinition', parameterName, defaultValue, description)
     }

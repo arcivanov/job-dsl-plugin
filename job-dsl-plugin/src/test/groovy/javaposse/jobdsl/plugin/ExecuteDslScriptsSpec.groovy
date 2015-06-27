@@ -17,10 +17,17 @@ import hudson.slaves.DumbSlave
 import hudson.tasks.Shell
 import javaposse.jobdsl.dsl.GeneratedJob
 import javaposse.jobdsl.dsl.GeneratedView
+import javaposse.jobdsl.plugin.actions.GeneratedConfigFilesAction
+import javaposse.jobdsl.plugin.actions.GeneratedJobsAction
+import javaposse.jobdsl.plugin.actions.GeneratedJobsBuildAction
+import javaposse.jobdsl.plugin.actions.GeneratedUserContentsAction
+import javaposse.jobdsl.plugin.actions.GeneratedViewsAction
+import javaposse.jobdsl.plugin.actions.GeneratedViewsBuildAction
+import javaposse.jobdsl.plugin.actions.SeedJobAction
 import org.junit.Rule
-import org.junit.Test
 import org.jvnet.hudson.test.JenkinsRule
 import org.jvnet.hudson.test.WithoutJenkins
+import org.jvnet.hudson.test.recipes.WithPlugin
 import spock.lang.Specification
 
 import static hudson.model.Result.SUCCESS
@@ -42,10 +49,11 @@ class ExecuteDslScriptsSpec extends Specification {
 
         then:
         actions != null
-        actions.size() == 3
+        actions.size() == 4
         actions[0] instanceof GeneratedJobsAction
         actions[1] instanceof GeneratedViewsAction
         actions[2] instanceof GeneratedConfigFilesAction
+        actions[3] instanceof GeneratedUserContentsAction
     }
 
     def scheduleBuildOnMasterUsingScriptText() {
@@ -258,6 +266,40 @@ class ExecuteDslScriptsSpec extends Specification {
         jenkinsRule.jenkins.getItemByFullName('/folder/test-job') == null
     }
 
+    def 'only use last build to calculate items to be deleted'() {
+        setup:
+        FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
+
+        when:
+        String script1 = 'job { name "test-job" }'
+        ExecuteDslScripts builder1 = new ExecuteDslScripts(
+                new ExecuteDslScripts.ScriptLocation('true', null, script1), false, RemovedJobAction.DELETE
+        )
+        runBuild(job, builder1)
+
+        then:
+        assertTrue(jenkinsRule.jenkins.getItemByFullName('test-job') instanceof FreeStyleProject)
+
+        when:
+        String script2 = 'job { name "different-job" }'
+        ExecuteDslScripts builder2 = new ExecuteDslScripts(
+                new ExecuteDslScripts.ScriptLocation('true', null, script2), false, RemovedJobAction.DELETE
+        )
+        runBuild(job, builder2)
+
+        then:
+        jenkinsRule.jenkins.getItemByFullName('different-job') instanceof FreeStyleProject
+        jenkinsRule.jenkins.getItemByFullName('test-job') == null
+
+        when:
+        jenkinsRule.createFreeStyleProject('test-job')
+        runBuild(job, builder2)
+
+        then:
+        jenkinsRule.jenkins.getItemByFullName('different-job') instanceof FreeStyleProject
+        jenkinsRule.jenkins.getItemByFullName('test-job') instanceof FreeStyleProject
+    }
+
     def useTemplateInRoot() {
         setup:
         FreeStyleProject template = jenkinsRule.createFreeStyleProject('template')
@@ -327,7 +369,7 @@ class ExecuteDslScriptsSpec extends Specification {
 
         FreeStyleBuild build = job.scheduleBuild2(0).get()
 
-        build.result == SUCCESS
+        assert build.result == SUCCESS
         build
     }
 
@@ -493,6 +535,7 @@ class ExecuteDslScriptsSpec extends Specification {
                 SeedJobAction).isConfigChanged()
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def createJobInFolder() {
         setup:
         FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
@@ -508,6 +551,7 @@ class ExecuteDslScriptsSpec extends Specification {
         jenkinsRule.instance.getItemByFullName('folder-a/test-job') instanceof FreeStyleProject
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def updateJobInFolder() {
         setup:
         jenkinsRule.instance.createProject(Folder, 'folder-a').createProject(FreeStyleProject, 'test-job')
@@ -547,26 +591,24 @@ class ExecuteDslScriptsSpec extends Specification {
 
         then:
         buildAction != null
-        buildAction.modifiedViews != null
-        buildAction.modifiedViews.size() == 1
-        buildAction.modifiedViews.contains(new GeneratedView('test-view'))
+        buildAction.modifiedObjects != null
+        buildAction.modifiedObjects.size() == 1
+        buildAction.modifiedObjects.contains(new GeneratedView('test-view'))
 
         when:
         GeneratedViewsAction action = job.getAction(GeneratedViewsAction)
 
         then:
         action != null
-        action.findLastGeneratedViews() != null
-        action.findLastGeneratedViews().size() == 1
-        action.findLastGeneratedViews().contains(new GeneratedView('test-view'))
-        action.findAllGeneratedViews() != null
-        action.findAllGeneratedViews().size() == 1
-        action.findAllGeneratedViews().contains(new GeneratedView('test-view'))
+        action.findLastGeneratedObjects() != null
+        action.findLastGeneratedObjects().size() == 1
+        action.findLastGeneratedObjects().contains(new GeneratedView('test-view'))
         action.views != null
         action.views.size() == 1
         action.views.contains(jenkinsRule.instance.getView('test-view'))
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def createViewInFolder() {
         setup:
         FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
@@ -604,6 +646,7 @@ class ExecuteDslScriptsSpec extends Specification {
         view.description == 'lorem ipsum'
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def updateViewInFolder() {
         setup:
         jenkinsRule.instance.createProject(Folder, 'folder-a').addView(new ListView('test-view'))
@@ -717,6 +760,42 @@ class ExecuteDslScriptsSpec extends Specification {
         folder.getView('test-view') == null
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
+    def 'delete view in folder after folder has been deleted'() {
+        setup:
+        FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
+
+        when:
+        String script1 = 'folder("folder")\nlistView("/folder/test-view")'
+        ExecuteDslScripts builder1 = new ExecuteDslScripts(
+                new ExecuteDslScripts.ScriptLocation('true', null, script1),
+                false,
+                RemovedJobAction.DELETE,
+                RemovedViewAction.DELETE,
+                LookupStrategy.JENKINS_ROOT
+        )
+        runBuild(job, builder1)
+
+        then:
+        Folder folder = jenkinsRule.instance.getItemByFullName('folder', Folder)
+        folder != null
+        folder.getView('test-view') instanceof ListView
+
+        when:
+        String script2 = '// no-op'
+        ExecuteDslScripts builder2 = new ExecuteDslScripts(
+                new ExecuteDslScripts.ScriptLocation('true', null, script2),
+                false,
+                RemovedJobAction.DELETE,
+                RemovedViewAction.DELETE,
+                LookupStrategy.JENKINS_ROOT
+        )
+        runBuild(job, builder2)
+
+        then:
+        jenkinsRule.instance.getItemByFullName('folder', Folder) == null
+    }
+
     def deleteViewRelative() {
         setup:
         Folder folder = jenkinsRule.jenkins.createProject(Folder, 'folder')
@@ -752,6 +831,7 @@ class ExecuteDslScriptsSpec extends Specification {
         folder.getView('test-view') == null
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def createFolder() {
         setup:
         FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
@@ -770,26 +850,24 @@ class ExecuteDslScriptsSpec extends Specification {
 
         then:
         buildAction != null
-        buildAction.modifiedJobs != null
-        buildAction.modifiedJobs.size() == 1
-        buildAction.modifiedJobs.contains(new GeneratedJob(null, 'test-folder'))
+        buildAction.modifiedObjects != null
+        buildAction.modifiedObjects.size() == 1
+        buildAction.modifiedObjects.contains(new GeneratedJob(null, 'test-folder'))
 
         when:
         GeneratedJobsAction action = job.getAction(GeneratedJobsAction)
 
         then:
         action != null
-        action.findLastGeneratedJobs() != null
-        action.findLastGeneratedJobs().size() == 1
-        action.findLastGeneratedJobs().contains(new GeneratedJob(null, 'test-folder'))
-        action.findAllGeneratedJobs() != null
-        action.findAllGeneratedJobs().size() == 1
-        action.findAllGeneratedJobs().contains(new GeneratedJob(null, 'test-folder'))
+        action.findLastGeneratedObjects() != null
+        action.findLastGeneratedObjects().size() == 1
+        action.findLastGeneratedObjects().contains(new GeneratedJob(null, 'test-folder'))
         action.items != null
         action.items.size() == 1
         action.items.contains(jenkinsRule.instance.getItem('test-folder'))
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def createFolderInFolder() {
         setup:
         FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
@@ -805,6 +883,7 @@ class ExecuteDslScriptsSpec extends Specification {
         jenkinsRule.instance.getItemByFullName('folder-a/folder-b') instanceof Folder
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def updateFolder() {
         setup:
         jenkinsRule.instance.createProject(Folder, 'test-folder')
@@ -826,6 +905,7 @@ class ExecuteDslScriptsSpec extends Specification {
         item.description == 'lorem ipsum'
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def updateFolderInFolder() {
         setup:
         jenkinsRule.instance.createProject(Folder, 'folder-a').createProject(Folder, 'folder-b')
@@ -847,6 +927,7 @@ class ExecuteDslScriptsSpec extends Specification {
         item.description == 'lorem ipsum'
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def updateFolderIgnoreChanges() {
         setup:
         jenkinsRule.instance.createProject(Folder, 'test-folder')
@@ -870,6 +951,7 @@ class ExecuteDslScriptsSpec extends Specification {
         item.description == null
     }
 
+    @WithPlugin('cloudbees-folder.hpi')
     def removeFolder() {
         setup:
         FreeStyleProject job = jenkinsRule.createFreeStyleProject('seed')
@@ -927,7 +1009,6 @@ class ExecuteDslScriptsSpec extends Specification {
         mavenJob.postbuilders.get(0) instanceof Shell
     }
 
-    @Test
     def 'allow empty archive'() {
         setup:
         String emptyArchiveScript = """job {
@@ -953,8 +1034,52 @@ class ExecuteDslScriptsSpec extends Specification {
         jenkinsRule.instance.getItem('test-job') instanceof FreeStyleProject
     }
 
+    def 'extension is used'() {
+        setup:
+        FreeStyleProject seedJob = jenkinsRule.createFreeStyleProject('seed')
+        seedJob.buildersList.add(new ExecuteDslScripts(
+                new ExecuteDslScripts.ScriptLocation('true', null, EXTENSION_SCRIPT), true, RemovedJobAction.IGNORE
+        ))
+
+        when:
+        FreeStyleBuild freeStyleBuild = seedJob.scheduleBuild2(0).get()
+
+        then:
+        freeStyleBuild.result == SUCCESS
+        FreeStyleProject job = jenkinsRule.instance.getItem('example-extension') as FreeStyleProject
+        job != null
+        ExampleJobDslExtension.SomeValueObject jobProperty = job.getProperty(ExampleJobDslExtension.SomeValueObject)
+        jobProperty != null
+        jobProperty.value == 'foo'
+        File testFile = new File(job.rootDir, 'foo.json')
+        testFile.exists()
+        testFile.text == 'bar'
+    }
+
+    def 'user content is created'() {
+        setup:
+        FreeStyleProject seedJob = jenkinsRule.createFreeStyleProject('seed')
+        seedJob.scheduleBuild2(0).get() // run a build to create a workspace
+        seedJob.someWorkspace.child('foo.txt').write('lorem ipsum', 'UTF-8')
+        seedJob.buildersList.add(new ExecuteDslScripts("userContent('foo.txt', streamFileFromWorkspace('foo.txt'))"))
+
+        when:
+        FreeStyleBuild freeStyleBuild = seedJob.scheduleBuild2(0).get()
+
+        then:
+        freeStyleBuild.result == SUCCESS
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').exists()
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').readToString().trim() == 'lorem ipsum'
+    }
+
     private static final String SCRIPT = """job {
     name('test-job')
+}"""
+
+    private static final String EXTENSION_SCRIPT = """job('example-extension') {
+    properties {
+        example('foo', 'bar')
+    }
 }"""
 
     private static final String UTIL_SCRIPT = '''import util.Util

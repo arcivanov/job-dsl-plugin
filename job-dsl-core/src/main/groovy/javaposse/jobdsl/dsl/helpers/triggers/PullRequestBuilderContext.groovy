@@ -1,17 +1,24 @@
 package javaposse.jobdsl.dsl.helpers.triggers
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
+import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 
-class PullRequestBuilderContext implements Context {
+class PullRequestBuilderContext extends AbstractContext {
     List admins = []
     List userWhitelist = []
     List orgWhitelist = []
     String cron = 'H/5 * * * *'
-    String triggerPhrase = ''
+    String triggerPhrase
     boolean onlyTriggerPhrase = false
     boolean useGitHubHooks = false
     boolean permitAll = false
     boolean autoCloseFailedPullRequests = false
+    String commentFilePath
+
+    PullRequestBuilderContext(JobManagement jobManagement) {
+        super(jobManagement)
+    }
 
     void admin(String admin) {
         admins << admin
@@ -47,6 +54,14 @@ class PullRequestBuilderContext implements Context {
         this.cron = cron
     }
 
+    /**
+     * @since 1.31
+     */
+    @RequiresPlugin(id = 'ghprb', minimumVersion = '1.14')
+    void commentFilePath(String commentFilePath) {
+        this.commentFilePath = commentFilePath
+    }
+
     void triggerPhrase(String triggerPhrase) {
         this.triggerPhrase = triggerPhrase
     }
@@ -66,5 +81,4 @@ class PullRequestBuilderContext implements Context {
     void autoCloseFailedPullRequests(boolean autoCloseFailedPullRequests = true) {
         this.autoCloseFailedPullRequests = autoCloseFailedPullRequests
     }
-
 }

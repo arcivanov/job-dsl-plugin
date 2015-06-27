@@ -1,38 +1,21 @@
 package javaposse.jobdsl.dsl.views
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.JobManagement
 
 import static java.lang.String.CASE_INSENSITIVE_ORDER
 import static javaposse.jobdsl.dsl.ContextHelper.executeInContext
 
-class SectionsContext implements Context {
+class SectionsContext extends AbstractContext {
     List<Node> sectionNodes = []
 
-    /**
-     * <hudson.plugins.sectioned__view.ListViewSection>
-     *     <jobNames>
-     *         <comparator class="hudson.util.CaseInsensitiveComparator"/>
-     *         <string>test</string>
-     *     </jobNames>
-     *     <jobFilters/>
-     *     <name>foo</name>
-     *     <includeRegex>bla</includeRegex>
-     *     <width>FULL</width>
-     *     <alignment>CENTER</alignment>
-     *     <columns>
-     *         <hudson.views.StatusColumn/>
-     *         <hudson.views.WeatherColumn/>
-     *         <hudson.views.JobColumn/>
-     *         <hudson.views.LastSuccessColumn/>
-     *         <hudson.views.LastFailureColumn/>
-     *         <hudson.views.LastDurationColumn/>
-     *         <hudson.views.BuildButtonColumn/>
-     *     </columns>
-     * </hudson.plugins.sectioned__view.ListViewSection>
-     */
+    SectionsContext(JobManagement jobManagement) {
+        super(jobManagement)
+    }
+
     void listView(@DslContext(ListViewSectionContext) Closure listViewSectionClosure) {
-        ListViewSectionContext context = new ListViewSectionContext()
+        ListViewSectionContext context = new ListViewSectionContext(jobManagement)
         executeInContext(listViewSectionClosure, context)
 
         sectionNodes << new NodeBuilder().'hudson.plugins.sectioned__view.ListViewSection' {

@@ -3,15 +3,13 @@ package javaposse.jobdsl.dsl
 /**
  * DSL element representing a Jenkins view.
  */
-abstract class View implements Context {
+abstract class View extends AbstractContext {
     private final List<WithXmlAction> withXmlActions = []
-
-    protected final JobManagement jobManagement
 
     String name
 
     protected View(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+        super(jobManagement)
     }
 
     @Deprecated
@@ -45,7 +43,6 @@ abstract class View implements Context {
     /**
      * Postpone all xml processing until someone actually asks for the xml. That lets us execute everything in order,
      * even if the user didn't specify them in order.
-     * @return
      */
     String getXml() {
         Writer xmlOutput = new StringWriter()

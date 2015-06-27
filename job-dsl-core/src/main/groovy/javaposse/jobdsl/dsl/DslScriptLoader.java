@@ -96,6 +96,7 @@ public class DslScriptLoader {
         generatedItems.setConfigFiles(extractGeneratedConfigFiles(jp, scriptRequest.getIgnoreExisting()));
         generatedItems.setJobs(extractGeneratedJobs(jp, scriptRequest.getIgnoreExisting()));
         generatedItems.setViews(extractGeneratedViews(jp, scriptRequest.getIgnoreExisting()));
+        generatedItems.setUserContents(extractGeneratedUserContents(jp, scriptRequest.getIgnoreExisting()));
 
         scheduleJobsToRun(jp.getQueueToBuild(), jobManagement);
 
@@ -117,7 +118,7 @@ public class DslScriptLoader {
                         jp.getJm().renameJobMatching(job.getPreviousNamesRegex(), job.getName());
                     }
                 }
-                jp.getJm().createOrUpdateConfig(item.getName(), xml, ignoreExisting);
+                jp.getJm().createOrUpdateConfig(item, ignoreExisting);
                 String templateName = item instanceof Job ? ((Job) item).getTemplateName() : null;
                 generatedJobs.add(new GeneratedJob(templateName, item.getName()));
             }
@@ -145,6 +146,16 @@ public class DslScriptLoader {
             generatedConfigFiles.add(new GeneratedConfigFile(id, configFile.getName()));
         }
         return generatedConfigFiles;
+    }
+
+    private static Set<GeneratedUserContent> extractGeneratedUserContents(JobParent jp, boolean ignoreExisting) {
+        Set<GeneratedUserContent> generatedUserContents = Sets.newLinkedHashSet();
+        for (UserContent userContent : jp.getReferencedUserContents()) {
+            LOGGER.log(Level.FINE, String.format("Saving user content %s", userContent.getPath()));
+            jp.getJm().createOrUpdateUserContent(userContent, ignoreExisting);
+            generatedUserContents.add(new GeneratedUserContent(userContent.getPath()));
+        }
+        return generatedUserContents;
     }
 
     static void scheduleJobsToRun(List<String> jobNames, JobManagement jobManagement) {
@@ -194,6 +205,7 @@ public class DslScriptLoader {
         icz.addImports("javaposse.jobdsl.dsl.views.jobfilter.RegexMatchValue");
         icz.addImports("javaposse.jobdsl.dsl.helpers.scm.SvnCheckoutStrategy");
         icz.addImports("javaposse.jobdsl.dsl.helpers.scm.SvnDepth");
+        icz.addImports("javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation");
         config.addCompilationCustomizers(icz);
 
         GrabDeprecationTransformation grabDeprecationTransformation = new GrabDeprecationTransformation(jobManagement);

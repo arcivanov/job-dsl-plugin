@@ -1,9 +1,12 @@
 buildscript {
     repositories {
         jcenter()
+        maven {
+            url 'http://repo.jenkins-ci.org/releases/'
+        }
     }
     dependencies {
-        classpath 'org.jenkins-ci.tools:gradle-jpi-plugin:0.10.0'
+        classpath 'org.jenkins-ci.tools:gradle-jpi-plugin:0.12.1'
     }
 }
 
@@ -15,12 +18,12 @@ description = 'Jenkins plugin to leverage job-dsl-core to programmatic create jo
 def generatedSourcesDir = 'generated'
 
 jenkinsPlugin {
-    coreVersion = '1.554.2'
+    coreVersion = '1.565'
     displayName = 'Job DSL'
     url = 'https://wiki.jenkins-ci.org/display/JENKINS/Job+DSL+Plugin'
     gitHubUrl = 'https://github.com/jenkinsci/job-dsl-plugin'
     maskClasses = 'groovy.grape'
-    compatibleSinceVersion = '1.29'
+    compatibleSinceVersion = '1.31'
     pluginFirstClassLoader = true
     localizerOutputDir = "$generatedSourcesDir/localizer"
     developers {
@@ -49,6 +52,11 @@ jenkinsPlugin {
 
 clean {
     delete generatedSourcesDir
+}
+
+test {
+    // workaround for JENKINS-4409 to avoid leaking files into the system temp directory
+    systemProperty 'java.io.tmpdir', temporaryDir.absolutePath
 }
 
 configurations {

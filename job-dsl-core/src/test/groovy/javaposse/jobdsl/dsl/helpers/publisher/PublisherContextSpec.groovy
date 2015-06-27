@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.helpers.publisher
 
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import spock.lang.Specification
 
@@ -9,7 +10,8 @@ import static javaposse.jobdsl.dsl.helpers.publisher.PublisherContext.Behavior.M
 
 class PublisherContextSpec extends Specification {
     JobManagement jobManagement = Mock(JobManagement)
-    PublisherContext context = new PublisherContext(jobManagement)
+    Item item = Mock(Item)
+    PublisherContext context = new PublisherContext(jobManagement, item)
 
     def 'empty call extended email method'() {
         when:
@@ -103,6 +105,7 @@ class PublisherContextSpec extends Specification {
         mailerPublisher.recipients[0].value() as String == 'recipient'
         mailerPublisher.dontNotifyEveryUnstableBuild[0].value() as Boolean == false
         mailerPublisher.sendToIndividuals[0].value() as Boolean == false
+        1 * jobManagement.requirePlugin('mailer')
     }
 
     def 'call standard mailer method with all args'() {
@@ -117,81 +120,119 @@ class PublisherContextSpec extends Specification {
         mailerPublisher.recipients[0].value() as String == 'recipient2'
         mailerPublisher.dontNotifyEveryUnstableBuild[0].value() as Boolean == true
         mailerPublisher.sendToIndividuals[0].value() as Boolean == true
+        1 * jobManagement.requirePlugin('mailer')
     }
 
     def 'call archive artifacts with all args'() {
+        setup:
+        jobManagement.jenkinsVersion >> new VersionNumber('1.565')
+
         when:
         context.archiveArtifacts('include/*', 'exclude/*', true)
 
         then:
-        Node archiveNode = context.publisherNodes[0]
-        archiveNode.name() == 'hudson.tasks.ArtifactArchiver'
-        archiveNode.artifacts[0].value() == 'include/*'
-        archiveNode.excludes[0].value() == 'exclude/*'
-        archiveNode.latestOnly[0].value() == true
-        archiveNode.allowEmptyArchive.isEmpty()
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.tasks.ArtifactArchiver'
+            children().size() == 4
+            artifacts[0].value() == 'include/*'
+            excludes[0].value() == 'exclude/*'
+            latestOnly[0].value() == true
+            allowEmptyArchive[0].value() == false
+        }
+        2 * jobManagement.logDeprecationWarning()
     }
 
     def 'call archive artifacts least args'() {
+        setup:
+        jobManagement.jenkinsVersion >> new VersionNumber('1.565')
+
         when:
         context.archiveArtifacts('include/*')
 
         then:
-        Node archiveNode = context.publisherNodes[0]
-        archiveNode.name() == 'hudson.tasks.ArtifactArchiver'
-        archiveNode.artifacts[0].value() == 'include/*'
-        archiveNode.excludes.isEmpty()
-        archiveNode.latestOnly[0].value() == false
-        archiveNode.allowEmptyArchive.isEmpty()
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.tasks.ArtifactArchiver'
+            children().size() == 3
+            artifacts[0].value() == 'include/*'
+            latestOnly[0].value() == false
+            allowEmptyArchive[0].value() == false
+        }
     }
 
     def 'call archive artifacts with closure'() {
+        setup:
+        jobManagement.jenkinsVersion >> new VersionNumber('1.565')
+
         when:
         context.archiveArtifacts {
-            pattern 'include/*'
-            exclude 'exclude/*'
+            pattern('include/*')
+            exclude('exclude/*')
             allowEmpty()
             latestOnly()
         }
 
         then:
-        Node archiveNode = context.publisherNodes[0]
-        archiveNode.name() == 'hudson.tasks.ArtifactArchiver'
-        archiveNode.artifacts[0].value() == 'include/*'
-        archiveNode.excludes[0].value() == 'exclude/*'
-        archiveNode.latestOnly[0].value() == true
-        archiveNode.allowEmptyArchive[0].value() == true
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.tasks.ArtifactArchiver'
+            children().size() == 4
+            artifacts[0].value() == 'include/*'
+            excludes[0].value() == 'exclude/*'
+            latestOnly[0].value() == true
+            allowEmptyArchive[0].value() == true
+        }
+        1 * jobManagement.logDeprecationWarning()
     }
 
-    def 'call archive artifacts with multiple patterns'() {
+    def 'call archive artifacts with closure and newer version of Jenkins'() {
+        setup:
+        jobManagement.jenkinsVersion >> new VersionNumber('1.580.2')
+
         when:
         context.archiveArtifacts {
-            pattern 'include1/*'
-            pattern 'include2/*'
+            pattern('include/*')
+            exclude('exclude/*')
+            allowEmpty()
+            latestOnly()
+            fingerprint()
+            onlyIfSuccessful()
+            defaultExcludes(false)
         }
 
         then:
-        Node archiveNode = context.publisherNodes[0]
-        archiveNode.name() == 'hudson.tasks.ArtifactArchiver'
-        archiveNode.artifacts[0].value() == 'include1/*,include2/*'
-        archiveNode.excludes.isEmpty()
-        archiveNode.latestOnly[0].value() == false
-        archiveNode.allowEmptyArchive.isEmpty()
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.tasks.ArtifactArchiver'
+            children().size() == 7
+            artifacts[0].value() == 'include/*'
+            excludes[0].value() == 'exclude/*'
+            latestOnly[0].value() == true
+            allowEmptyArchive[0].value() == true
+            fingerprint[0].value() == true
+            onlyIfSuccessful[0].value() == true
+            defaultExcludes[0].value() == false
+        }
+        1 * jobManagement.requireMinimumCoreVersion('1.575')
+        1 * jobManagement.requireMinimumCoreVersion('1.571')
+        1 * jobManagement.requireMinimumCoreVersion('1.567')
+        1 * jobManagement.logDeprecationWarning()
     }
 
-    def 'call deprecated junit archive with all args'() {
+    def 'call archive artifacts with multiple patterns'() {
+        setup:
+        jobManagement.jenkinsVersion >> new VersionNumber('1.565')
+
         when:
-        context.archiveJunit('include/*', true, true, true)
+        context.archiveArtifacts {
+            pattern('include1/*')
+            pattern('include2/*')
+        }
 
         then:
         with(context.publisherNodes[0]) {
-            name() == 'hudson.tasks.junit.JUnitResultArchiver'
+            name() == 'hudson.tasks.ArtifactArchiver'
             children().size() == 3
-            testResults[0].value() == 'include/*'
-            keepLongStdio[0].value() == true
-            testDataPublishers[0].children().size() == 2
-            testDataPublishers[0].'hudson.plugins.claim.ClaimTestDataPublisher'[0] != null
-            testDataPublishers[0].'hudson.plugins.junitattachments.AttachmentPublisher'[0] != null
+            artifacts[0].value() == 'include1/*,include2/*'
+            latestOnly[0].value() == false
+            allowEmptyArchive[0].value() == false
         }
     }
 
@@ -262,6 +303,8 @@ class PublisherContextSpec extends Specification {
         skippedThresholds.unstableNewThreshold[0].value() == 0
         skippedThresholds.failureThreshold[0].value() == 0
         skippedThresholds.failureNewThreshold[0].value() == 0
+
+        1 * jobManagement.requirePlugin('xunit')
     }
 
     def 'call archiveXUnit with some basic args'() {
@@ -297,6 +340,8 @@ class PublisherContextSpec extends Specification {
         skippedThresholds.unstableNewThreshold[0].value() == 0
         skippedThresholds.failureThreshold[0].value() == 0
         skippedThresholds.failureNewThreshold[0].value() == 9
+
+        1 * jobManagement.requirePlugin('xunit')
     }
 
     def 'call archiveXUnit with all basic args'() {
@@ -335,6 +380,8 @@ class PublisherContextSpec extends Specification {
         skippedThresholds.unstableNewThreshold[0].value() == 6
         skippedThresholds.failureThreshold[0].value() == 7
         skippedThresholds.failureNewThreshold[0].value() == 8
+
+        1 * jobManagement.requirePlugin('xunit')
     }
 
     def 'call archiveXUnit with all valid thresholdMode values'() {
@@ -361,6 +408,8 @@ class PublisherContextSpec extends Specification {
         skippedThresholds.failureThreshold[0].value() == 0
         skippedThresholds.failureNewThreshold[0].value() == 0
 
+        1 * jobManagement.requirePlugin('xunit')
+
         where:
         input                 | output
         ThresholdMode.NUMBER  | 1
@@ -381,6 +430,8 @@ class PublisherContextSpec extends Specification {
 
         def resultFile = xUnitNode.types[0]."${output}"[0]
         resultFile.pattern[0].value() == 'some_pattern'
+
+        1 * jobManagement.requirePlugin('xunit')
 
         where:
         input        | output
@@ -509,6 +560,8 @@ class PublisherContextSpec extends Specification {
         skippedThresholds.unstableNewThreshold[0].value() == 6
         skippedThresholds.failureThreshold[0].value() == 7
         skippedThresholds.failureNewThreshold[0].value() == 8
+
+        1 * jobManagement.requirePlugin('xunit')
     }
 
     def 'call jacoco code coverage with no args'() {
@@ -522,6 +575,7 @@ class PublisherContextSpec extends Specification {
         jacocoNode.execPattern[0].value() == '**/target/**.exec'
         jacocoNode.minimumInstructionCoverage[0].value() == '0'
         jacocoNode.changeBuildStatus[0] == null
+        1 * jobManagement.requirePlugin('jacoco')
     }
 
     def 'call jacoco code coverage with closure, set changeBuildStatus'(change) {
@@ -535,6 +589,7 @@ class PublisherContextSpec extends Specification {
         Node jacocoNode = context.publisherNodes[0]
         jacocoNode.name() == 'hudson.plugins.jacoco.JacocoPublisher'
         jacocoNode.changeBuildStatus[0].value() == change ? 'true' : 'false'
+        1 * jobManagement.requirePlugin('jacoco')
 
         where:
         change << [true, false]
@@ -552,7 +607,8 @@ class PublisherContextSpec extends Specification {
         jacocoNode.name() == 'hudson.plugins.jacoco.JacocoPublisher'
         jacocoNode.execPattern[0].value() == '**/target/**.exec'
         jacocoNode.minimumInstructionCoverage[0].value() == '0'
-        jacocoNode.changeBuildStatus[0].value() == 'true'
+        jacocoNode.changeBuildStatus[0].value() == true
+        1 * jobManagement.requirePlugin('jacoco')
     }
 
     def 'call jacoco code coverage with all args'() {
@@ -598,7 +654,8 @@ class PublisherContextSpec extends Specification {
         jacocoNode.maximumLineCoverage[0].value() == '10'
         jacocoNode.maximumMethodCoverage[0].value() == '11'
         jacocoNode.maximumClassCoverage[0].value() == '12'
-        jacocoNode.changeBuildStatus[0].value() == 'true'
+        jacocoNode.changeBuildStatus[0].value() == true
+        1 * jobManagement.requirePlugin('jacoco')
     }
 
     def 'calling minimal html publisher closure'() {
@@ -613,13 +670,15 @@ class PublisherContextSpec extends Specification {
         publisherHtmlNode.name() == 'htmlpublisher.HtmlPublisher'
         !publisherHtmlNode.reportTargets.isEmpty()
         def target = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[0]
-        target.children().size() == 6
+        target.children().size() == 7
         target.reportName[0].value() == ''
         target.reportDir[0].value() == 'build/*'
         target.reportFiles[0].value() == 'index.html'
         target.keepAll[0].value() == false
         target.allowMissing[0].value() == false
+        target.alwaysLinkToLastBuild[0].value() == false
         target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'calling minimal html publisher closure, plugin version older than 1.3'() {
@@ -643,6 +702,32 @@ class PublisherContextSpec extends Specification {
         target.reportFiles[0].value() == 'index.html'
         target.keepAll[0].value() == false
         target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
+    }
+
+    def 'calling minimal html publisher closure, plugin version older than 1.4'() {
+        setup:
+        jobManagement.getPluginVersion('htmlpublisher') >> new VersionNumber('1.3')
+
+        when:
+        context.publishHtml {
+            report('build/*') {
+            }
+        }
+
+        then:
+        Node publisherHtmlNode = context.publisherNodes[0]
+        publisherHtmlNode.name() == 'htmlpublisher.HtmlPublisher'
+        !publisherHtmlNode.reportTargets.isEmpty()
+        def target = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[0]
+        target.children().size() == 6
+        target.reportName[0].value() == ''
+        target.reportDir[0].value() == 'build/*'
+        target.reportFiles[0].value() == 'index.html'
+        target.keepAll[0].value() == false
+        target.allowMissing[0].value() == false
+        target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'calling html publisher closure with all options'() {
@@ -653,6 +738,7 @@ class PublisherContextSpec extends Specification {
                 reportFiles('test.html')
                 allowMissing()
                 keepAll()
+                alwaysLinkToLastBuild()
             }
         }
 
@@ -662,13 +748,15 @@ class PublisherContextSpec extends Specification {
         publisherHtmlNode.name() == 'htmlpublisher.HtmlPublisher'
         !publisherHtmlNode.reportTargets.isEmpty()
         def target = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[0]
-        target.children().size() == 6
+        target.children().size() == 7
         target.reportName[0].value() == 'foo'
         target.reportDir[0].value() == 'build/*'
         target.reportFiles[0].value() == 'test.html'
         target.keepAll[0].value() == true
         target.allowMissing[0].value() == true
+        target.alwaysLinkToLastBuild[0].value() == true
         target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'calling minimal html publisher'() {
@@ -682,13 +770,15 @@ class PublisherContextSpec extends Specification {
         publisherHtmlNode.name() == 'htmlpublisher.HtmlPublisher'
         !publisherHtmlNode.reportTargets.isEmpty()
         def target = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[0]
-        target.children().size() == 6
+        target.children().size() == 7
         target.reportName[0].value() == 'My Name'
         target.reportDir[0].value() == 'build/*'
         target.reportFiles[0].value() == 'index.html'
         target.keepAll[0].value() == false
         target.allowMissing[0].value() == false
+        target.alwaysLinkToLastBuild[0].value() == false
         target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'calling html publisher with a few args'() {
@@ -702,13 +792,15 @@ class PublisherContextSpec extends Specification {
         publisherHtmlNode.name() == 'htmlpublisher.HtmlPublisher'
         !publisherHtmlNode.reportTargets.isEmpty()
         def target = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[0]
-        target.children().size() == 6
+        target.children().size() == 7
         target.reportName[0].value() == 'Report Name'
         target.reportDir[0].value() == 'build/*'
         target.reportFiles[0].value() == 'content.html'
         target.keepAll[0].value() == true
         target.allowMissing[0].value() == false
+        target.alwaysLinkToLastBuild[0].value() == false
         target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'calling html publisher with map syntax without all args'() {
@@ -722,13 +814,15 @@ class PublisherContextSpec extends Specification {
         publisherHtmlNode.name() == 'htmlpublisher.HtmlPublisher'
         !publisherHtmlNode.reportTargets.isEmpty()
         def target = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[0]
-        target.children().size() == 6
+        target.children().size() == 7
         target.reportName[0].value() == 'Report Name'
         target.reportDir[0].value() == 'build/*'
         target.reportFiles[0].value() == 'index.html'
         target.keepAll[0].value() == false
         target.allowMissing[0].value() == false
+        target.alwaysLinkToLastBuild[0].value() == false
         target.wrapperName[0].value() == 'htmlpublisher-wrapper.html'
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'calling html publisher with multiple reports'() {
@@ -749,6 +843,8 @@ class PublisherContextSpec extends Specification {
         def target2 = publisherHtmlNode.reportTargets[0].'htmlpublisher.HtmlPublisherTarget'[1]
         target2.reportName[0].value() == 'Test Report'
         target2.reportDir[0].value() == 'test/*'
+
+        1 * jobManagement.requirePlugin('htmlpublisher')
     }
 
     def 'call Jabber publish with minimal args'() {
@@ -771,6 +867,7 @@ class PublisherContextSpec extends Specification {
         buildToNode.attributes().containsKey('class')
         buildToNode.attribute('class') == 'hudson.plugins.im.build_notify.DefaultBuildToChatNotifier'
         publisherNode.matrixMultiplier[0].value() == 'ONLY_CONFIGURATIONS'
+        1 * jobManagement.requirePlugin('jabber')
     }
 
     def 'call Jabber publish with all args'() {
@@ -795,6 +892,8 @@ class PublisherContextSpec extends Specification {
         Node buildToNode = publisherNode.buildToChatNotifier[0]
         buildToNode.attributes().containsKey('class')
         buildToNode.attribute('class') == 'hudson.plugins.im.build_notify.SummaryOnlyBuildToChatNotifier'
+
+        1 * jobManagement.requirePlugin('jabber')
     }
 
     def 'call Jabber publish with closure args'() {
@@ -825,6 +924,7 @@ class PublisherContextSpec extends Specification {
         buildToNode.attributes().containsKey('class')
         buildToNode.attribute('class') == 'hudson.plugins.im.build_notify.PrintFailingTestsBuildToChatNotifier'
         publisherNode.matrixMultiplier[0].value() == 'ONLY_CONFIGURATIONS'
+        1 * jobManagement.requirePlugin('jabber')
     }
 
     def 'call Jabber publish to get exceptions'() {
@@ -853,6 +953,7 @@ class PublisherContextSpec extends Specification {
         publisherNode.criteria[0].value() == 'Any'
         publisherNode.archiveMethod[0].value() == 'TAR'
         publisherNode.overrideDefaultExcludes[0].value() == false
+        1 * jobManagement.requirePlugin('clone-workspace-scm')
     }
 
     def 'call Clone Workspace publish with all args'() {
@@ -867,6 +968,7 @@ class PublisherContextSpec extends Specification {
         publisherNode.criteria[0].value() == 'Not Failed'
         publisherNode.archiveMethod[0].value() == 'ZIP'
         publisherNode.overrideDefaultExcludes[0].value() == true
+        1 * jobManagement.requirePlugin('clone-workspace-scm')
     }
 
     def 'call Clone Workspace publish to get exceptions'() {
@@ -874,13 +976,13 @@ class PublisherContextSpec extends Specification {
         context.publishCloneWorkspace('*/**', '*/.svn', 'Quite plainly wrong', 'ZIP', true)
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
 
         when:
         context.publishCloneWorkspace('*/**', '*/.svn', 'Not Failed', 'ZAP', true)
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
     }
 
     def 'call Clone Workspace with Closure'() {
@@ -900,6 +1002,7 @@ class PublisherContextSpec extends Specification {
         publisherNode.criteria[0].value() == 'Not Failed'
         publisherNode.archiveMethod[0].value() == 'ZIP'
         publisherNode.overrideDefaultExcludes[0].value() == true
+        1 * jobManagement.requirePlugin('clone-workspace-scm')
     }
 
     def 'call scp publish with not enough entries'() {
@@ -907,7 +1010,7 @@ class PublisherContextSpec extends Specification {
         context.publishScp('javadoc', null)
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
     }
 
     def 'call scp publish with closure'() {
@@ -924,6 +1027,7 @@ class PublisherContextSpec extends Specification {
         entryNode.filePath[0].value() == ''
         entryNode.sourceFile[0].value() == 'api-sdk/**/*'
         entryNode.keepHierarchy[0].value() == 'false'
+        1 * jobManagement.requirePlugin('scp')
 
         when:
         context.publishScp('javadoc') {
@@ -938,6 +1042,7 @@ class PublisherContextSpec extends Specification {
         entryNode2.filePath[0].value() == 'javadoc'
         entryNode2.sourceFile[0].value() == 'build/javadocs/**/*'
         entryNode2.keepHierarchy[0].value() == 'true'
+        1 * jobManagement.requirePlugin('scp')
     }
 
     def 'call scp publish with collection of sources'() {
@@ -961,6 +1066,7 @@ class PublisherContextSpec extends Specification {
             sourceFile[0].value() == 'docs/**/*'
             keepHierarchy[0].value() == 'false'
         }
+        1 * jobManagement.requirePlugin('scp')
 
         when:
         context.publishScp('javadoc') {
@@ -982,6 +1088,7 @@ class PublisherContextSpec extends Specification {
             sourceFile[0].value() == 'build/groovydoc/**/*'
             keepHierarchy[0].value() == 'true'
         }
+        1 * jobManagement.requirePlugin('scp')
     }
 
     def 'call trigger downstream without args'() {
@@ -1015,7 +1122,7 @@ class PublisherContextSpec extends Specification {
         context.downstream('THE-JOB', 'BAD')
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
     }
 
     def 'call downstream ext with all args'() {
@@ -1048,7 +1155,7 @@ class PublisherContextSpec extends Specification {
         with(publisherNode.configs[0].'hudson.plugins.parameterizedtrigger.BuildTriggerConfig'[0]) {
             projects[0].value() == 'Project1, Project2'
             condition[0].value() == 'UNSTABLE_OR_BETTER'
-            triggerWithNoParameters[0].value() == 'true'
+            triggerWithNoParameters[0].value() == true
             configs[0].'hudson.plugins.parameterizedtrigger.CurrentBuildParameters'[0] instanceof Node
             configs[0].'hudson.plugins.parameterizedtrigger.FileBuildParameters'[0].propertiesFile[0].value() ==
                     'dir/my.properties'
@@ -1087,8 +1194,10 @@ class PublisherContextSpec extends Specification {
         Node second = publisherNode.configs[0].'hudson.plugins.parameterizedtrigger.BuildTriggerConfig'[1]
         second.projects[0].value() == 'Project2'
         second.condition[0].value() == 'SUCCESS'
-        second.triggerWithNoParameters[0].value() == 'false'
+        second.triggerWithNoParameters[0].value() == false
         second.configs[0].'hudson.plugins.parameterizedtrigger.CurrentBuildParameters'[0] instanceof Node
+
+        1 * jobManagement.requirePlugin('parameterized-trigger')
 
         when:
         context.downstreamParameterized {
@@ -1100,8 +1209,9 @@ class PublisherContextSpec extends Specification {
         Node third = context.publisherNodes[1].configs[0].'hudson.plugins.parameterizedtrigger.BuildTriggerConfig'[0]
         third.projects[0].value() == 'Project3'
         third.condition[0].value() == 'SUCCESS'
-        third.triggerWithNoParameters[0].value() == 'false'
+        third.triggerWithNoParameters[0].value() == false
         third.configs[0].attribute('class') == 'java.util.Collections$EmptyList'
+        1 * jobManagement.requirePlugin('parameterized-trigger')
 
         when:
         context.downstreamParameterized {
@@ -1109,7 +1219,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
     }
 
     def 'call violations plugin with no args has correct defaults'() {
@@ -1133,6 +1243,7 @@ class PublisherContextSpec extends Specification {
         typeConfigNode.unstable[0].value() == '999'
         typeConfigNode.usePattern[0].value() == 'false'
         typeConfigNode.pattern[0].value() == ''
+        1 * jobManagement.requirePlugin('violations')
     }
 
     def 'call violations plugin with all args'() {
@@ -1186,6 +1297,7 @@ class PublisherContextSpec extends Specification {
         jslintNode.'hudson.plugins.violations.TypeConfig'[0].unstable[0].value() == '999'
         jslintNode.'hudson.plugins.violations.TypeConfig'[0].usePattern[0].value() == 'false'
         jslintNode.'hudson.plugins.violations.TypeConfig'[0].pattern[0].value() == ''
+        1 * jobManagement.requirePlugin('violations')
     }
 
     def 'call violations plugin with bad types'() {
@@ -1207,6 +1319,7 @@ class PublisherContextSpec extends Specification {
         publisherNode.name() == 'hudson.plugins.chucknorris.CordellWalkerRecorder'
         publisherNode.value()[0].name() == 'factGenerator'
         publisherNode.value()[0].value() == ''
+        1 * jobManagement.requirePlugin('chucknorris')
     }
 
     def 'irc channels are added'() {
@@ -1228,6 +1341,7 @@ class PublisherContextSpec extends Specification {
         targets.value()[1].name() == 'hudson.plugins.im.GroupChatIMMessageTarget'
         targets.value()[1].value()[0].name() == 'name'
         targets.value()[1].value()[0].value() == '#c2'
+        1 * jobManagement.requirePlugin('ircbot')
     }
 
     def 'irc notification strategy is set'() {
@@ -1238,6 +1352,7 @@ class PublisherContextSpec extends Specification {
 
         then:
         context.publisherNodes[0].strategy[0].value() == 'STATECHANGE_ONLY'
+        1 * jobManagement.requirePlugin('ircbot')
     }
 
     def 'irc notification invalid strategy triggers exception'() {
@@ -1258,6 +1373,7 @@ class PublisherContextSpec extends Specification {
 
         then:
         context.publisherNodes[0].notifyFixers[0].value() == 'true'
+        1 * jobManagement.requirePlugin('ircbot')
     }
 
     def 'irc notification message is set'() {
@@ -1273,6 +1389,7 @@ class PublisherContextSpec extends Specification {
         ircPublisher.name() == 'hudson.plugins.ircbot.IrcPublisher'
         ircPublisher.'buildToChatNotifier'[0].attributes()['class'] ==
                 'hudson.plugins.im.build_notify.SummaryOnlyBuildToChatNotifier'
+        1 * jobManagement.requirePlugin('ircbot')
     }
 
     def 'default notification message is set if not specified'() {
@@ -1287,6 +1404,7 @@ class PublisherContextSpec extends Specification {
         ircPublisher.name() == 'hudson.plugins.ircbot.IrcPublisher'
         ircPublisher.'buildToChatNotifier'[0].attributes()['class'] ==
                 'hudson.plugins.im.build_notify.DefaultBuildToChatNotifier'
+        1 * jobManagement.requirePlugin('ircbot')
     }
 
     def 'default notification strategy is set if not specified'() {
@@ -1298,6 +1416,7 @@ class PublisherContextSpec extends Specification {
         then:
         context.publisherNodes.size() == 1
         context.publisherNodes[0].strategy[0].value() == 'ALL'
+        1 * jobManagement.requirePlugin('ircbot')
     }
 
     def 'given the required cobertura report file name all defaults are set for your pleasure'() {
@@ -1325,6 +1444,7 @@ class PublisherContextSpec extends Specification {
         assertTarget('failingTarget', 1, 'LINE', '0')
         assertTarget('failingTarget', 2, 'CONDITIONAL', '0')
         context.publisherNodes[0].sourceEncoding[0].value() == 'ASCII'
+        1 * jobManagement.requirePlugin('cobertura')
     }
 
     private void assertTarget(String targetName, int position, String type, String value) {
@@ -1356,6 +1476,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].autoUpdateStability[0].value() == true
         context.publisherNodes[0].zoomCoverageChart[0].value() == true
         context.publisherNodes[0].failNoReports[0].value() == false
+        1 * jobManagement.requirePlugin('cobertura')
     }
 
     def 'overriding cobertura default targets'() {
@@ -1378,6 +1499,7 @@ class PublisherContextSpec extends Specification {
         assertTarget('healthyTarget', 2, 'CONDITIONAL', '700000')
         assertTarget('unhealthyTarget', 2, 'CONDITIONAL', '800000')
         assertTarget('failingTarget', 2, 'CONDITIONAL', '900000')
+        1 * jobManagement.requirePlugin('cobertura')
     }
 
     def 'adding cobertura extra targets'() {
@@ -1400,6 +1522,7 @@ class PublisherContextSpec extends Specification {
         assertTarget('healthyTarget', 5, 'CLASSES', '700000')
         assertTarget('unhealthyTarget', 5, 'CLASSES', '800000')
         assertTarget('failingTarget', 5, 'CLASSES', '900000')
+        1 * jobManagement.requirePlugin('cobertura')
     }
 
     def 'checking for invalid cobertura target type'() {
@@ -1455,6 +1578,7 @@ class PublisherContextSpec extends Specification {
         }
         then:
         context.publisherNodes[0].sourceEncoding[0].value() == 'UTF-8'
+        1 * jobManagement.requirePlugin('cobertura')
     }
 
     def 'call allowBrokenBuildClaiming'() {
@@ -1464,6 +1588,7 @@ class PublisherContextSpec extends Specification {
         then:
         context.publisherNodes.size() == 1
         context.publisherNodes[0].name() == 'hudson.plugins.claim.ClaimPublisher'
+        1 * jobManagement.requirePlugin('claim')
     }
 
     def 'add fingerprinting'(targets, recordArtifacts) {
@@ -1495,6 +1620,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].regexp[0].value() == 'success'
         context.publisherNodes[0].regexpForFailed[0].value() == ''
         context.publisherNodes[0].setForMatrix[0].value() == false
+        1 * jobManagement.requirePlugin('description-setter')
     }
 
     def 'call buildDescription with two arguments'() {
@@ -1509,6 +1635,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].regexpForFailed[0].value() == ''
         context.publisherNodes[0].description[0].value() == 'AWSUM!'
         context.publisherNodes[0].setForMatrix[0].value() == false
+        1 * jobManagement.requirePlugin('description-setter')
     }
 
     def 'call buildDescription with three arguments'() {
@@ -1523,6 +1650,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].regexpForFailed[0].value() == 'failed'
         context.publisherNodes[0].description[0].value() == 'AWSUM!'
         context.publisherNodes[0].setForMatrix[0].value() == false
+        1 * jobManagement.requirePlugin('description-setter')
     }
 
     def 'call buildDescription with four arguments'() {
@@ -1538,6 +1666,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].description[0].value() == 'AWSUM!'
         context.publisherNodes[0].descriptionForFailed[0].value() == 'NOES!'
         context.publisherNodes[0].setForMatrix[0].value() == false
+        1 * jobManagement.requirePlugin('description-setter')
     }
 
     def 'call buildDescription with five arguments'() {
@@ -1553,6 +1682,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].description[0].value() == 'AWSUM!'
         context.publisherNodes[0].descriptionForFailed[0].value() == 'NOES!'
         context.publisherNodes[0].setForMatrix[0].value() == true
+        1 * jobManagement.requirePlugin('description-setter')
     }
 
     def 'call textFinder with one argument'() {
@@ -1567,6 +1697,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].alsoCheckConsoleOutput[0].value() == false
         context.publisherNodes[0].succeedIfFound[0].value() == false
         context.publisherNodes[0].unstableIfFound[0].value() == false
+        1 * jobManagement.requirePlugin('text-finder')
     }
 
     def 'call textFinder with two arguments'() {
@@ -1581,6 +1712,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].alsoCheckConsoleOutput[0].value() == false
         context.publisherNodes[0].succeedIfFound[0].value() == false
         context.publisherNodes[0].unstableIfFound[0].value() == false
+        1 * jobManagement.requirePlugin('text-finder')
     }
 
     def 'call textFinder with three arguments'() {
@@ -1595,6 +1727,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].alsoCheckConsoleOutput[0].value() == true
         context.publisherNodes[0].succeedIfFound[0].value() == false
         context.publisherNodes[0].unstableIfFound[0].value() == false
+        1 * jobManagement.requirePlugin('text-finder')
     }
 
     def 'call textFinder with four arguments'() {
@@ -1609,6 +1742,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].alsoCheckConsoleOutput[0].value() == true
         context.publisherNodes[0].succeedIfFound[0].value() == true
         context.publisherNodes[0].unstableIfFound[0].value() == false
+        1 * jobManagement.requirePlugin('text-finder')
     }
 
     def 'call textFinder with five arguments'() {
@@ -1623,6 +1757,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].alsoCheckConsoleOutput[0].value() == true
         context.publisherNodes[0].succeedIfFound[0].value() == true
         context.publisherNodes[0].unstableIfFound[0].value() == true
+        1 * jobManagement.requirePlugin('text-finder')
     }
 
     def 'call postBuildTask with two arguments'() {
@@ -1641,6 +1776,7 @@ class PublisherContextSpec extends Specification {
             RunIfJobSuccessful[0].value() == false
             script[0].value() == 'git clean -fdx'
         }
+        1 * jobManagement.requirePlugin('postbuild-task')
     }
 
     def 'call postBuildTask with two tasks'() {
@@ -1667,6 +1803,7 @@ class PublisherContextSpec extends Specification {
             RunIfJobSuccessful[0].value() == true
             script[0].value() == 'git gc'
         }
+        1 * jobManagement.requirePlugin('postbuild-task')
     }
 
     def 'call aggregate downstream test results with no args'() {
@@ -1722,6 +1859,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
         context.publisherNodes[0].groovyScript[0].value() == 'foo'
         context.publisherNodes[0].behavior[0].value() == 0
+        1 * jobManagement.requirePlugin('groovy-postbuild')
     }
 
     def 'call groovyPostBuild with overriden failure behavior'() {
@@ -1733,6 +1871,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
         context.publisherNodes[0].groovyScript[0].value() == 'foo'
         context.publisherNodes[0].behavior[0].value() == 1
+        1 * jobManagement.requirePlugin('groovy-postbuild')
     }
 
     def 'call javadoc archiver with no args'() {
@@ -1744,6 +1883,7 @@ class PublisherContextSpec extends Specification {
         javadocNode.name() == 'hudson.tasks.JavadocArchiver'
         javadocNode.javadocDir[0].value() == ''
         javadocNode.keepAll[0].value() == false
+        1 * jobManagement.requirePlugin('javadoc')
     }
 
     def 'call javadoc archiver with all args'() {
@@ -1758,6 +1898,7 @@ class PublisherContextSpec extends Specification {
         javadocNode.name() == 'hudson.tasks.JavadocArchiver'
         javadocNode.javadocDir[0].value() == 'build/javadoc'
         javadocNode.keepAll[0].value() == true
+        1 * jobManagement.requirePlugin('javadoc')
     }
 
     def 'call associated files with normal args'() {
@@ -1768,6 +1909,7 @@ class PublisherContextSpec extends Specification {
         Node associatedFilesNode = context.publisherNodes[0]
         associatedFilesNode.name() == 'org.jenkinsci.plugins.associatedfiles.AssociatedFilesPublisher'
         associatedFilesNode.associatedFiles[0].value() == '/foo/file/${VARIABLE}'
+        1 * jobManagement.requirePlugin('associated-files')
     }
 
     def 'call emma with one argument'() {
@@ -1788,6 +1930,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].healthReports[0].maxLine[0].value() == 80
         context.publisherNodes[0].healthReports[0].minCondition[0].value() == 0
         context.publisherNodes[0].healthReports[0].maxCondition[0].value() == 80
+        1 * jobManagement.requirePlugin('emma')
     }
 
     def 'call emma with range thresholds'() {
@@ -1814,6 +1957,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].healthReports[0].maxLine[0].value() == 70
         context.publisherNodes[0].healthReports[0].minCondition[0].value() == 25
         context.publisherNodes[0].healthReports[0].maxCondition[0].value() == 65
+        1 * jobManagement.requirePlugin('emma')
     }
 
     def 'call emma with individual thresholds'() {
@@ -1845,6 +1989,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].healthReports[0].maxLine[0].value() == 70
         context.publisherNodes[0].healthReports[0].minCondition[0].value() == 25
         context.publisherNodes[0].healthReports[0].maxCondition[0].value() == 65
+        1 * jobManagement.requirePlugin('emma')
     }
 
     def 'call emma with bad range values'() {
@@ -1902,69 +2047,101 @@ class PublisherContextSpec extends Specification {
         context.publishRobotFrameworkReports()
 
         then:
-        Node node = context.publisherNodes[0]
-        node.name() == 'hudson.plugins.robot.RobotPublisher'
-        node.outputPath[0].value() == RobotFrameworkContext.DEFAULT_OUTPUT_PATH
-        node.passThreshold[0].value() == 100.0
-        node.unstableThreshold[0].value() == 0.0
-        node.onlyCritical[0].value() == false
-        node.reportFileName[0].value() == RobotFrameworkContext.DEFAULT_REPORT_FILE_NAME
-        node.logFileName[0].value() == RobotFrameworkContext.DEFAULT_LOG_FILE_NAME
-        node.outputFileName[0].value() == RobotFrameworkContext.DEFAULT_OUTPUT_FILE_NAME
-    }
-
-    def 'publish Robot framework report using specific value for outputPath'() {
-        when:
-        context.publishRobotFrameworkReports { outputPath('/path/to/foo') }
-
-        then:
-        Node node = context.publisherNodes[0]
-        node.name() == 'hudson.plugins.robot.RobotPublisher'
-        node.outputPath[0].value() == '/path/to/foo'
-    }
-
-    def 'publish Robot framework report using specific values for passThreshold and unstableThreshold'() {
-        when:
-        context.publishRobotFrameworkReports {
-            passThreshold(100.0)
-            unstableThreshold(10.0)
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.robot.RobotPublisher'
+            children().size() == 9
+            outputPath[0].value() == 'target/robotframework-reports'
+            passThreshold[0].value() == 100.0
+            unstableThreshold[0].value() == 0.0
+            onlyCritical[0].value() == false
+            reportFileName[0].value() == 'report.html'
+            logFileName[0].value() == 'log.html'
+            outputFileName[0].value() == 'output.xml'
+            disableArchiveOutput[0].value() == false
+            otherFiles[0].value().empty
         }
-
-        then:
-        Node node = context.publisherNodes[0]
-        node.name() == 'hudson.plugins.robot.RobotPublisher'
-        node.passThreshold[0].value() == 100.0
-        node.unstableThreshold[0].value() == 10.0
+        1 * jobManagement.requirePlugin('robot')
     }
 
-    def 'publish Robot framework report using specific value for onlyCritical'() {
+    def 'publish Robot framework report using default values and older plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('robot') >> new VersionNumber('1.4.2')
+
         when:
-        context.publishRobotFrameworkReports { onlyCritical(true) }
+        context.publishRobotFrameworkReports()
 
         then:
-        Node node = context.publisherNodes[0]
-        node.name() == 'hudson.plugins.robot.RobotPublisher'
-        node.passThreshold[0].value() == 100.0
-        node.unstableThreshold[0].value() == 0.0
-        node.onlyCritical[0].value() == true
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.robot.RobotPublisher'
+            children().size() == 8
+            outputPath[0].value() == 'target/robotframework-reports'
+            passThreshold[0].value() == 100.0
+            unstableThreshold[0].value() == 0.0
+            onlyCritical[0].value() == false
+            reportFileName[0].value() == 'report.html'
+            logFileName[0].value() == 'log.html'
+            outputFileName[0].value() == 'output.xml'
+            otherFiles[0].value().empty
+        }
+        1 * jobManagement.requirePlugin('robot')
+        1 * jobManagement.logDeprecationWarning(_)
     }
 
-    def 'publish Robot framework report using a configure closure'() {
+    def 'publish Robot framework report using default values and very old plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('robot') >> new VersionNumber('1.2.0')
+
+        when:
+        context.publishRobotFrameworkReports()
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.robot.RobotPublisher'
+            children().size() == 7
+            outputPath[0].value() == 'target/robotframework-reports'
+            passThreshold[0].value() == 100.0
+            unstableThreshold[0].value() == 0.0
+            onlyCritical[0].value() == false
+            reportFileName[0].value() == 'report.html'
+            logFileName[0].value() == 'log.html'
+            outputFileName[0].value() == 'output.xml'
+        }
+        1 * jobManagement.requirePlugin('robot')
+        1 * jobManagement.logDeprecationWarning(_)
+    }
+
+    def 'publish Robot framework report using all options'() {
         when:
         context.publishRobotFrameworkReports {
-            passThreshold(50.0)
-            unstableThreshold(10.0)
             outputPath('/path/to/foo')
+            passThreshold(90.0)
+            unstableThreshold(10.0)
+            onlyCritical()
+            reportFileName('project.html')
+            logFileName('out.html')
+            outputFileName('out.xml')
+            disableArchiveOutput()
+            otherFiles('screenshot-1.png', 'screenshot-2.png')
         }
 
         then:
-        Node node = context.publisherNodes[0]
-        node.name() == 'hudson.plugins.robot.RobotPublisher'
-        node.passThreshold[0].value() == 50.0
-        node.unstableThreshold[0].value() == 10.0
-        node.outputPath[0].value() == '/path/to/foo'
-        node.onlyCritical[0].value() == false
-        node.reportFileName[0].value() == RobotFrameworkContext.DEFAULT_REPORT_FILE_NAME
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.robot.RobotPublisher'
+            children().size() == 9
+            outputPath[0].value() == '/path/to/foo'
+            passThreshold[0].value() == 90.0
+            unstableThreshold[0].value() == 10.0
+            onlyCritical[0].value() == true
+            reportFileName[0].value() == 'project.html'
+            logFileName[0].value() == 'out.html'
+            outputFileName[0].value() == 'out.xml'
+            disableArchiveOutput[0].value() == true
+            otherFiles[0].string[0].value() == 'screenshot-1.png'
+            otherFiles[0].string[1].value() == 'screenshot-2.png'
+        }
+        1 * jobManagement.requirePlugin('robot')
+        1 * jobManagement.requireMinimumPluginVersion('robot', '1.2.1')
+        1 * jobManagement.requireMinimumPluginVersion('robot', '1.4.3')
     }
 
     def 'call buildPipelineTrigger'() {
@@ -1980,6 +2157,7 @@ class PublisherContextSpec extends Specification {
             configs.size() == 1
             configs[0].value().empty
         }
+        1 * jobManagement.requirePlugin('build-pipeline-plugin')
     }
 
     def 'call buildPipelineTrigger with empty parameters'() {
@@ -1998,6 +2176,7 @@ class PublisherContextSpec extends Specification {
             configs.size() == 1
             configs[0].value().empty
         }
+        1 * jobManagement.requirePlugin('build-pipeline-plugin')
     }
 
     def 'call buildPipelineTrigger with parameters'() {
@@ -2024,6 +2203,7 @@ class PublisherContextSpec extends Specification {
             configs[0].'hudson.plugins.parameterizedtrigger.PredefinedBuildParameters'[0].'properties'[0].value() ==
                     'key1=value1'
         }
+        1 * jobManagement.requirePlugin('build-pipeline-plugin')
     }
 
     def 'call buildPipelineTrigger with null argument'() {
@@ -2039,6 +2219,7 @@ class PublisherContextSpec extends Specification {
             configs.size() == 1
             configs[0].value().empty
         }
+        1 * jobManagement.requirePlugin('build-pipeline-plugin')
     }
 
     def 'call github commit notifier methods'() {
@@ -2050,6 +2231,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes.size() == 1
         def githubCommitNotifier = context.publisherNodes[0]
         githubCommitNotifier.name() == 'com.cloudbees.jenkins.GitHubCommitNotifier'
+        1 * jobManagement.requirePlugin('github')
     }
 
     def 'call git with minimal options'() {
@@ -2065,6 +2247,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].pushMerge[0].value() == false
         context.publisherNodes[0].pushOnlyIfSuccess[0].value() == false
         context.publisherNodes[0].forcePush[0].value() == false
+        1 * jobManagement.requirePlugin('git')
     }
 
     def 'call git with minimal options pre 2.2.6'() {
@@ -2082,6 +2265,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].configVersion[0].value() == 2
         context.publisherNodes[0].pushMerge[0].value() == false
         context.publisherNodes[0].pushOnlyIfSuccess[0].value() == false
+        1 * jobManagement.requirePlugin('git')
     }
 
     def 'call git with all options'() {
@@ -2122,6 +2306,7 @@ class PublisherContextSpec extends Specification {
                 branchName[0].value() == 'master'
             }
         }
+        1 * jobManagement.requirePlugin('git')
     }
 
     def 'call git with minimal tag options'() {
@@ -2148,6 +2333,7 @@ class PublisherContextSpec extends Specification {
                 updateTag[0].value() == false
             }
         }
+        1 * jobManagement.requirePlugin('git')
     }
 
     def 'call git without tag targetRepoName'() {
@@ -2256,6 +2442,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == false
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock with some overridden notification settings'() {
@@ -2295,6 +2482,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == false
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock trigger methods with no args defaults their value to true'() {
@@ -2338,6 +2526,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == true
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock with all non-default args set'() {
@@ -2382,6 +2571,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == true
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock with tags'() {
@@ -2419,6 +2609,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == false
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock with multiple tag calls'() {
@@ -2457,6 +2648,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == false
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock with empty tag'() {
@@ -2503,6 +2695,7 @@ class PublisherContextSpec extends Specification {
                 entry[5].boolean[0].value() == false
             }
         }
+        1 * jobManagement.requirePlugin('jenkins-flowdock-plugin')
     }
 
     def 'flowdock with no tokens'() {
@@ -2510,7 +2703,7 @@ class PublisherContextSpec extends Specification {
         context.flowdock(null)
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
     }
 
     def 'stashNotifier with default configuration'() {
@@ -2530,6 +2723,7 @@ class PublisherContextSpec extends Specification {
             commitSha1[0].value() == ''
             includeBuildNumberInKey[0].value() == false
         }
+        1 * jobManagement.requirePlugin('stashNotifier')
     }
 
     def 'stashNotifier with configuration of all parameters'() {
@@ -2551,6 +2745,7 @@ class PublisherContextSpec extends Specification {
             commitSha1[0].value() == 'sha1'
             includeBuildNumberInKey[0].value() == true
         }
+        1 * jobManagement.requirePlugin('stashNotifier')
     }
 
     def 'stashNotifier with configuration of all parameters using defaults for boolean parameter'() {
@@ -2572,6 +2767,7 @@ class PublisherContextSpec extends Specification {
             commitSha1[0].value() == 'sha1'
             includeBuildNumberInKey[0].value() == true
         }
+        1 * jobManagement.requirePlugin('stashNotifier')
     }
 
     def 'mavenDeploymentLinker with regex'() {
@@ -2584,6 +2780,7 @@ class PublisherContextSpec extends Specification {
             name() == 'hudson.plugins.mavendeploymentlinker.MavenDeploymentLinkerRecorder'
             regexp[0].value() == '.*.tar.gz'
         }
+        1 * jobManagement.requirePlugin('maven-deployment-linker')
     }
 
     def 'wsCleanup with configuration of all parameters'() {
@@ -2627,6 +2824,7 @@ class PublisherContextSpec extends Specification {
             notFailBuild[0].value() == true
             externalDelete[0].value() == 'rm'
         }
+        1 * jobManagement.requirePlugin('ws-cleanup')
     }
 
     def 'wsCleanup with default configuration'() {
@@ -2649,6 +2847,7 @@ class PublisherContextSpec extends Specification {
             notFailBuild[0].value() == false
             externalDelete[0].value() == ''
         }
+        1 * jobManagement.requirePlugin('ws-cleanup')
     }
 
     def 'wsCleanup with configuration of all parameters using defaults for boolean parameter'() {
@@ -2692,6 +2891,7 @@ class PublisherContextSpec extends Specification {
             notFailBuild[0].value() == false
             externalDelete[0].value() == 'rm'
         }
+        1 * jobManagement.requirePlugin('ws-cleanup')
     }
 
     def 'call rundeck with all args should create valid rundeck node'() {
@@ -2717,6 +2917,7 @@ class PublisherContextSpec extends Specification {
         rundeckNode.tag[0].value() == 'tag'
         rundeckNode.shouldWaitForRundeckJob[0].value() == true
         rundeckNode.shouldFailTheBuild[0].value() == false
+        1 * jobManagement.requirePlugin('rundeck')
     }
 
     def 'call rundeck with invalid jobId should fail'() {
@@ -2744,6 +2945,7 @@ class PublisherContextSpec extends Specification {
         rundeckNode.tag[0].value() == ''
         rundeckNode.shouldWaitForRundeckJob[0].value() == false
         rundeckNode.shouldFailTheBuild[0].value() == false
+        1 * jobManagement.requirePlugin('rundeck')
     }
 
     def 'call s3 without profile'(String profile) {
@@ -2769,12 +2971,12 @@ class PublisherContextSpec extends Specification {
 
         where:
         source | bucket | region
-        null   | 'test' | 'EU_WEST_1'
-        ''     | 'test' | 'EU_WEST_1'
-        'test' | null   | 'EU_WEST_1'
-        'test' | ''     | 'EU_WEST_1'
-        null   | null   | 'EU_WEST_1'
-        ''     | ''     | 'EU_WEST_1'
+        null   | 'test' | 'eu-west-1'
+        ''     | 'test' | 'eu-west-1'
+        'test' | null   | 'eu-west-1'
+        'test' | ''     | 'eu-west-1'
+        null   | null   | 'eu-west-1'
+        ''     | ''     | 'eu-west-1'
         'test' | 'test' | ''
         'test' | 'test' | null
     }
@@ -2782,7 +2984,7 @@ class PublisherContextSpec extends Specification {
     def 'call s3 with invalid storage class'(String storageClass) {
         when:
         context.s3('test') {
-            entry('foo', 'bar', 'EU_WEST_1') {
+            entry('foo', 'bar', 'eu-west-1') {
                 delegate.storageClass(storageClass)
             }
         }
@@ -2797,7 +2999,7 @@ class PublisherContextSpec extends Specification {
     def 'call s3 with some options'() {
         when:
         context.s3('profile') {
-            entry('foo', 'bar', 'US_EAST_1')
+            entry('foo', 'bar', 'us-east-1')
             metadata('key', 'value')
         }
 
@@ -2805,14 +3007,16 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes.size() == 1
         with(context.publisherNodes[0]) {
             name() == 'hudson.plugins.s3.S3BucketPublisher'
+            children().size() == 3
             profileName[0].value() == 'profile'
             entries.size() == 1
             entries[0].'hudson.plugins.s3.Entry'.size() == 1
             with(entries[0].'hudson.plugins.s3.Entry'[0]) {
+                children().size() == 7
                 sourceFile[0].value() == 'foo'
                 bucket[0].value() == 'bar'
                 storageClass[0].value() == 'STANDARD'
-                selectedRegion[0].value() == 'US_EAST_1'
+                selectedRegion[0].value() == 'us-east-1'
                 noUploadOnFailure[0].value() == false
                 uploadFromSlave[0].value() == false
                 managedArtifacts[0].value() == false
@@ -2820,17 +3024,19 @@ class PublisherContextSpec extends Specification {
             userMetadata.size() == 1
             userMetadata[0].'hudson.plugins.s3.MetadataPair'.size() == 1
             with(userMetadata[0].'hudson.plugins.s3.MetadataPair'[0]) {
+                children().size() == 2
                 key[0].value() == 'key'
                 value[0].value() == 'value'
             }
         }
+        1 * jobManagement.requirePlugin('s3')
     }
 
     def 'call s3 with more options'() {
         when:
         context.s3('profile') {
-            entry('foo', 'bar', 'EU_WEST_1')
-            entry('bar', 'baz', 'US_EAST_1') {
+            entry('foo', 'bar', 'eu-west-1')
+            entry('bar', 'baz', 'us-east-1') {
                 storageClass('REDUCED_REDUNDANCY')
                 noUploadOnFailure(true)
                 uploadFromSlave(true)
@@ -2843,10 +3049,60 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes.size() == 1
         with(context.publisherNodes[0]) {
             name() == 'hudson.plugins.s3.S3BucketPublisher'
+            children().size() == 3
             profileName[0].value() == 'profile'
             entries.size() == 1
             entries[0].'hudson.plugins.s3.Entry'.size() == 2
             with(entries[0].'hudson.plugins.s3.Entry'[0]) {
+                children().size() == 7
+                sourceFile[0].value() == 'foo'
+                bucket[0].value() == 'bar'
+                storageClass[0].value() == 'STANDARD'
+                selectedRegion[0].value() == 'eu-west-1'
+                noUploadOnFailure[0].value() == false
+                uploadFromSlave[0].value() == false
+                managedArtifacts[0].value() == false
+            }
+            with(entries[0].'hudson.plugins.s3.Entry'[1]) {
+                children().size() == 7
+                sourceFile[0].value() == 'bar'
+                bucket[0].value() == 'baz'
+                storageClass[0].value() == 'REDUCED_REDUNDANCY'
+                selectedRegion[0].value() == 'us-east-1'
+                noUploadOnFailure[0].value() == true
+                uploadFromSlave[0].value() == true
+                managedArtifacts[0].value() == true
+            }
+            userMetadata.size() == 1
+            userMetadata[0].'hudson.plugins.s3.MetadataPair'.size() == 1
+            with(userMetadata[0].'hudson.plugins.s3.MetadataPair'[0]) {
+                children().size() == 2
+                key[0].value() == 'key'
+                value[0].value() == 'value'
+            }
+        }
+        1 * jobManagement.requirePlugin('s3')
+    }
+
+    def 'call s3 with older plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('s3') >> new VersionNumber('0.6')
+
+        when:
+        context.s3('profile') {
+            entry('foo', 'bar', 'EU_WEST_1')
+        }
+
+        then:
+        context.publisherNodes.size() == 1
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.s3.S3BucketPublisher'
+            children().size() == 3
+            profileName[0].value() == 'profile'
+            entries.size() == 1
+            entries[0].'hudson.plugins.s3.Entry'.size() == 1
+            with(entries[0].'hudson.plugins.s3.Entry'[0]) {
+                children().size() == 7
                 sourceFile[0].value() == 'foo'
                 bucket[0].value() == 'bar'
                 storageClass[0].value() == 'STANDARD'
@@ -2855,25 +3111,16 @@ class PublisherContextSpec extends Specification {
                 uploadFromSlave[0].value() == false
                 managedArtifacts[0].value() == false
             }
-            with(entries[0].'hudson.plugins.s3.Entry'[1]) {
-                sourceFile[0].value() == 'bar'
-                bucket[0].value() == 'baz'
-                storageClass[0].value() == 'REDUCED_REDUNDANCY'
-                selectedRegion[0].value() == 'US_EAST_1'
-                noUploadOnFailure[0].value() == true
-                uploadFromSlave[0].value() == true
-                managedArtifacts[0].value() == true
-            }
-            userMetadata.size() == 1
-            userMetadata[0].'hudson.plugins.s3.MetadataPair'.size() == 1
-            with(userMetadata[0].'hudson.plugins.s3.MetadataPair'[0]) {
-                key[0].value() == 'key'
-                value[0].value() == 'value'
-            }
+            userMetadata[0].value().empty
         }
+        1 * jobManagement.requirePlugin('s3')
+        1 * jobManagement.logDeprecationWarning(_)
     }
 
     def 'call flexible publish'() {
+        setup:
+        jobManagement.getPluginVersion('flexible-publish') >> new VersionNumber('0.12')
+
         when:
         context.flexiblePublish {
             condition {
@@ -2900,9 +3147,13 @@ class PublisherContextSpec extends Specification {
                 publisher[0].recipients[0].value() == 'test@test.com'
             }
         }
+        1 * jobManagement.requirePlugin('flexible-publish')
     }
 
     def 'call flexible publish and test escaping'() {
+        setup:
+        jobManagement.getPluginVersion('flexible-publish') >> new VersionNumber('0.12')
+
         when:
         context.flexiblePublish {
             condition {
@@ -2929,9 +3180,13 @@ class PublisherContextSpec extends Specification {
                 publisher[0].children().size() > 0
             }
         }
+        1 * jobManagement.requirePlugin('flexible-publish')
     }
 
     def 'call flexible publish with build step'() {
+        setup:
+        jobManagement.getPluginVersion('flexible-publish') >> new VersionNumber('0.12')
+
         when:
         context.flexiblePublish {
             condition {
@@ -2958,9 +3213,54 @@ class PublisherContextSpec extends Specification {
                 publisher[0].command[0].value() == 'echo hello'
             }
         }
+        1 * jobManagement.requirePlugin('flexible-publish')
+        1 * jobManagement.requirePlugin('any-buildstep')
+    }
+
+    def 'call flexible publish with multiple actions'() {
+        setup:
+        jobManagement.getPluginVersion('flexible-publish') >> new VersionNumber('0.13')
+
+        when:
+        context.flexiblePublish {
+            condition {
+                stringsMatch('foo', 'bar', false)
+            }
+            step {
+                shell('echo hello')
+            }
+            publisher {
+                wsCleanup()
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jenkins__ci.plugins.flexible__publish.FlexiblePublisher'
+            children().size() == 1
+            publishers[0].children().size == 1
+
+            with(publishers[0].children()[0]) {
+                name() == 'org.jenkins__ci.plugins.flexible__publish.ConditionalPublisher'
+                condition[0].attribute('class') == 'org.jenkins_ci.plugins.run_condition.core.StringsMatchCondition'
+                condition[0].arg1[0].value() == 'foo'
+                condition[0].arg2[0].value() == 'bar'
+                condition[0].ignoreCase[0].value() == 'false'
+                publisherList[0].children().size() == 2
+                with(publisherList[0]) {
+                    children()[0].name() == 'hudson.tasks.Shell'
+                    children()[1].name() == 'hudson.plugins.ws__cleanup.WsCleanup'
+                }
+            }
+        }
+        1 * jobManagement.requirePlugin('flexible-publish')
+        1 * jobManagement.requirePlugin('any-buildstep')
     }
 
     def 'call flexible publish without condition'() {
+        setup:
+        jobManagement.getPluginVersion('flexible-publish') >> new VersionNumber('0.12')
+
         when:
         context.flexiblePublish {
             step {
@@ -2982,6 +3282,7 @@ class PublisherContextSpec extends Specification {
                 publisher[0].command[0].value() == 'echo hello'
             }
         }
+        1 * jobManagement.requirePlugin('flexible-publish')
     }
 
     def 'call flexible publish without action'() {
@@ -2991,5 +3292,1245 @@ class PublisherContextSpec extends Specification {
 
         then:
         thrown(IllegalArgumentException)
+    }
+
+    def 'call post build scripts with minimal options'() {
+        when:
+        context.postBuildScripts {
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jenkinsci.plugins.postbuildscript.PostBuildScript'
+            children().size() == 2
+            buildSteps[0].children().size == 0
+            scriptOnlyIfSuccess[0].value() == true
+        }
+        1 * jobManagement.requirePlugin('postbuildscript')
+    }
+
+    def 'call post build scripts with all options'() {
+        when:
+        context.postBuildScripts {
+            steps {
+                shell('echo TEST')
+            }
+            onlyIfBuildSucceeds(false)
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jenkinsci.plugins.postbuildscript.PostBuildScript'
+            children().size() == 2
+            buildSteps[0].children().size == 1
+            buildSteps[0].children()[0].name() == 'hudson.tasks.Shell'
+            scriptOnlyIfSuccess[0].value() == false
+        }
+        1 * jobManagement.requirePlugin('postbuildscript')
+    }
+
+    def 'call sonar with no options'() {
+        when:
+        context.sonar()
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.sonar.SonarPublisher'
+            children().size() == 10
+            jdk[0].value() == '(Inherit From Job)'
+            branch[0].value() == ''
+            language[0].value().empty
+            mavenOpts[0].value().empty
+            jobAdditionalProperties[0].value().empty
+            mavenInstallationName[0].value() == '(Inherit From Job)'
+            rootPom[0].value().empty
+            settings[0].value().empty
+            settings[0].@class == 'jenkins.mvn.DefaultSettingsProvider'
+            globalSettings[0].value().empty
+            globalSettings[0].@class == 'jenkins.mvn.DefaultGlobalSettingsProvider'
+            usePrivateRepository[0].value() == false
+        }
+        1 * jobManagement.requirePlugin('sonar')
+    }
+
+    def 'call sonar with all options'() {
+        when:
+        context.sonar {
+            branch('test')
+            overrideTriggers {
+                skipIfEnvironmentVariable('FOO')
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.sonar.SonarPublisher'
+            children().size() == 11
+            jdk[0].value() == '(Inherit From Job)'
+            branch[0].value() == 'test'
+            language[0].value().empty
+            mavenOpts[0].value().empty
+            jobAdditionalProperties[0].value().empty
+            mavenInstallationName[0].value() == '(Inherit From Job)'
+            rootPom[0].value().empty
+            settings[0].value().empty
+            settings[0].@class == 'jenkins.mvn.DefaultSettingsProvider'
+            globalSettings[0].value().empty
+            globalSettings[0].@class == 'jenkins.mvn.DefaultGlobalSettingsProvider'
+            usePrivateRepository[0].value() == false
+            triggers[0].children().size() == 3
+            triggers[0].skipScmCause[0].value() == false
+            triggers[0].skipUpstreamCause[0].value() == false
+            triggers[0].envVar[0].value() == 'FOO'
+        }
+        1 * jobManagement.requirePlugin('sonar')
+    }
+
+    def 'call plotPlugin with some basic args'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                propertiesFile('data.prop')
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.PropertiesSeries'[0]) {
+                    children().size() == 3
+                    file[0].value() == 'data.prop'
+                    label[0].value() == ''
+                    fileType[0].value() == 'properties'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with all args'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                title('plot title')
+                yAxis('yaxis title')
+                numberOfBuilds(42)
+                useDescriptions()
+                keepRecords()
+                excludeZero()
+                logarithmic()
+                propertiesFile('data.prop')
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value() == 'plot title'
+                yaxis[0].value() == 'yaxis title'
+                group[0].value() == 'my group'
+                numBuilds[0].value() == 42
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == true
+                keepRecords[0].value() == true
+                exclZero[0].value() == true
+                logarithmic[0].value() == true
+                with(series[0].'hudson.plugins.plot.PropertiesSeries'[0]) {
+                    children().size() == 3
+                    file[0].value() == 'data.prop'
+                    label[0].value() == ''
+                    fileType[0].value() == 'properties'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with all chart styles'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                style(chart)
+                propertiesFile('data.prop') {
+                    label('some label')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == chart
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.PropertiesSeries'[0]) {
+                    children().size() == 3
+                    file[0].value() == 'data.prop'
+                    label[0].value() == 'some label'
+                    fileType[0].value() == 'properties'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+
+        where:
+        chart << ['area', 'bar', 'bar3d', 'line', 'line3d', 'stackedArea', 'stackedbar', 'stackedbar3d', 'waterfall']
+    }
+
+    def 'call plotPlugin with a xml series'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                xmlFile('data.prop')
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.XMLSeries'[0]) {
+                    children().size() == 6
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'xml'
+                    label[0].value().empty
+                    nodeTypeString[0].value() == 'NODESET'
+                    url[0].value() == ''
+                    xpathString[0].value() == ''
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with full xml series'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                xmlFile('data.prop') {
+                    nodeType('NODE')
+                    url('http://somewhere')
+                    xpath('an xpath string')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.XMLSeries'[0]) {
+                    children().size() == 6
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'xml'
+                    label[0].value().empty
+                    nodeTypeString[0].value() == 'NODE'
+                    url[0].value() == 'http://somewhere'
+                    xpathString[0].value() == 'an xpath string'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with a csv series'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop')
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 7
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'OFF'
+                    exclusionValues[0].value() == ''
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with full csv series'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    url('http://somewhere')
+                    showTable()
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 7
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'OFF'
+                    exclusionValues[0].value() == ''
+                    url[0].value() == 'http://somewhere'
+                    displayTableFlag[0].value() == true
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using single includeColumns(str)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    includeColumns('foo')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'INCLUDE_BY_STRING'
+                    exclusionValues[0].value() == 'foo'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(strExclusionSet[0]) {
+                        children().size() == 1
+                        string[0].value() == 'foo'
+                    }
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using multiple includeColumns(str)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    includeColumns('foo')
+                    includeColumns('bar', 'woo')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'INCLUDE_BY_STRING'
+                    exclusionValues[0].value() == 'foo,bar,woo'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(strExclusionSet[0]) {
+                        children().size() == 3
+                        string[0].value() == 'foo'
+                        string[1].value() == 'bar'
+                        string[2].value() == 'woo'
+                    }
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using single excludeColumns(str)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    excludeColumns('foo')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'EXCLUDE_BY_STRING'
+                    exclusionValues[0].value() == 'foo'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(strExclusionSet[0]) {
+                        children().size() == 1
+                        string[0].value() == 'foo'
+                    }
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using multiple excludeColumns(str)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    excludeColumns('foo')
+                    excludeColumns('bar', 'woo')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'EXCLUDE_BY_STRING'
+                    exclusionValues[0].value() == 'foo,bar,woo'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(strExclusionSet[0]) {
+                        children().size() == 3
+                        string[0].value() == 'foo'
+                        string[1].value() == 'bar'
+                        string[2].value() == 'woo'
+                    }
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using single includeColumns(int)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    includeColumns(1)
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'INCLUDE_BY_COLUMN'
+                    exclusionValues[0].value() == '1'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(colExclusionSet[0]) {
+                        children().size() == 1
+                    }
+                    colExclusionSet[0].'int'[0].value() == '1'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using multiple includeColumns(int)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    includeColumns(1)
+                    includeColumns(3, 6)
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'INCLUDE_BY_COLUMN'
+                    exclusionValues[0].value() == '1,3,6'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(colExclusionSet[0]) {
+                        children().size() == 3
+                    }
+                    colExclusionSet[0].'int'[0].value() == '1'
+                    colExclusionSet[0].'int'[1].value() == '3'
+                    colExclusionSet[0].'int'[2].value() == '6'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using single excludeColumns(int)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    excludeColumns(1)
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'EXCLUDE_BY_COLUMN'
+                    exclusionValues[0].value() == '1'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(colExclusionSet[0]) {
+                        children().size() == 1
+                    }
+                    colExclusionSet[0].'int'[0].value() == '1'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series using multiple excludeColumns(int)'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    excludeColumns(1)
+                    excludeColumns(3, 6)
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.plot.PlotPublisher'
+            children().size() == 1
+            with(plots.'hudson.plugins.plot.Plot'[0]) {
+                children().size() == 12
+                title[0].value().empty
+                yaxis[0].value().empty
+                group[0].value() == 'my group'
+                numBuilds[0].value().empty
+                csvFileName[0].value() == 'some.csv'
+                csvLastModification[0].value() == 0
+                style[0].value() == 'line'
+                useDescr[0].value() == false
+                keepRecords[0].value() == false
+                exclZero[0].value() == false
+                logarithmic[0].value() == false
+                with(series[0].'hudson.plugins.plot.CSVSeries'[0]) {
+                    children().size() == 8
+                    file[0].value() == 'data.prop'
+                    fileType[0].value() == 'csv'
+                    label[0].value().empty
+                    inclusionFlag[0].value() == 'EXCLUDE_BY_COLUMN'
+                    exclusionValues[0].value() == '1,3,6'
+                    url[0].value() == ''
+                    displayTableFlag[0].value() == false
+                    with(colExclusionSet[0]) {
+                        children().size() == 3
+                    }
+                    colExclusionSet[0].'int'[0].value() == '1'
+                    colExclusionSet[0].'int'[1].value() == '3'
+                    colExclusionSet[0].'int'[2].value() == '6'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('plot', '1.9')
+    }
+
+    def 'call plotPlugin with csv series mixing exclude types'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'some.csv') {
+                csvFile('data.prop') {
+                    "$type0"(data0)
+                    "$type1"(data1)
+                }
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+
+        where:
+        type0            | data0 | type1            | data1
+        'includeColumns' | 0     | 'includeColumns' | 'foo'
+        'includeColumns' | 'foo' | 'includeColumns' | 0
+        'excludeColumns' | 0     | 'excludeColumns' | 'foo'
+        'excludeColumns' | 'foo' | 'excludeColumns' | 0
+        'includeColumns' | 0     | 'excludeColumns' | 0
+        'excludeColumns' | 0     | 'includeColumns' | 0
+        'includeColumns' | 'foo' | 'excludeColumns' | 'foo'
+        'excludeColumns' | 'foo' | 'includeColumns' | 'foo'
+    }
+
+    def 'call plotPlugin without group'() {
+        when:
+        context.plotBuildData {
+            plot(group, 'some.csv') {
+                propertiesFile('data.prop')
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+
+        where:
+        group << [null, '']
+    }
+
+    def 'call plotPlugin without data store'() {
+        when:
+        context.plotBuildData {
+            plot('my group', dataStore) {
+                propertiesFile('data.prop')
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+
+        where:
+        dataStore << [null, '']
+    }
+
+    def 'call plotPlugin without file name'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'test.csv') {
+                propertiesFile(fileName)
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+
+        where:
+        fileName << [null, '']
+    }
+
+    def 'call plotPlugin with invalid style'() {
+        when:
+        context.plotBuildData {
+            plot('my group', 'test.csv') {
+                style('foo')
+                propertiesFile('data.prop')
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'retryBuild with no options'() {
+        when:
+        context.retryBuild()
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'com.chikli.hudson.plugin.naginator.NaginatorPublisher'
+            children().size() == 6
+            regexpForRerun[0].value().empty
+            rerunIfUnstable[0].value() == false
+            rerunMatrixPart[0].value() == false
+            checkRegexp[0].value() == false
+            maxSchedule[0].value() == 0
+            delay[0].@class == 'com.chikli.hudson.plugin.naginator.ProgressiveDelay'
+            delay[0].children().size() == 2
+            delay[0].increment[0].value() == 300
+            delay[0].max[0].value() == 10800
+        }
+        1 * jobManagement.requireMinimumPluginVersion('naginator', '1.15')
+    }
+
+    def 'retryBuild with all options'() {
+        when:
+        context.retryBuild {
+            rerunIfUnstable()
+            retryLimit(3)
+            fixedDelay(30)
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'com.chikli.hudson.plugin.naginator.NaginatorPublisher'
+            children().size() == 6
+            regexpForRerun[0].value().empty
+            rerunIfUnstable[0].value() == true
+            rerunMatrixPart[0].value() == false
+            checkRegexp[0].value() == false
+            maxSchedule[0].value() == 3
+            delay[0].@class == 'com.chikli.hudson.plugin.naginator.FixedDelay'
+            delay[0].children().size() == 1
+            delay[0].delay[0].value() == 30
+        }
+        1 * jobManagement.requireMinimumPluginVersion('naginator', '1.15')
+    }
+
+    def 'mergePullRequest with no options'() {
+        when:
+        context.mergePullRequest()
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jenkinsci.plugins.ghprb.GhprbPullRequestMerge'
+            children().size() == 4
+            mergeComment[0].value() == ''
+            onlyTriggerPhrase[0].value() == false
+            onlyAdminsMerge[0].value() == false
+            disallowOwnCode[0].value() == false
+        }
+    }
+
+    def 'mergePullRequest with all options'() {
+        when:
+        context.mergePullRequest {
+            mergeComment('Test comment')
+            onlyTriggerPhrase()
+            onlyAdminsMerge()
+            disallowOwnCode()
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jenkinsci.plugins.ghprb.GhprbPullRequestMerge'
+            children().size() == 4
+            mergeComment[0].value() == 'Test comment'
+            onlyTriggerPhrase[0].value() == true
+            onlyAdminsMerge[0].value() == true
+            disallowOwnCode[0].value() == true
+        }
+    }
+
+    def 'publishBuild with no options'() {
+        when:
+        context.publishBuild()
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.build__publisher.BuildPublisher'
+            children().size() == 2
+            publishUnstableBuilds[0].value() == true
+            publishFailedBuilds[0].value() == true
+        }
+        1 * jobManagement.requireMinimumPluginVersion('build-publisher', '1.20')
+    }
+
+    def 'publishBuild with all options'() {
+        when:
+        context.publishBuild {
+            publishUnstable(false)
+            publishFailed(false)
+            discardOldBuilds(5, 3)
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'hudson.plugins.build__publisher.BuildPublisher'
+            children().size() == 3
+            publishUnstableBuilds[0].value() == false
+            publishFailedBuilds[0].value() == false
+            logRotator[0].children().size() == 4
+            logRotator[0].daysToKeep[0].value() == 5
+            logRotator[0].numToKeep[0].value() == 3
+            logRotator[0].artifactDaysToKeep[0].value() == -1
+            logRotator[0].artifactNumToKeep[0].value() == -1
+        }
+        1 * jobManagement.requireMinimumPluginVersion('build-publisher', '1.20')
+    }
+
+    def 'hipChat notification with no options'() {
+        when:
+        context.hipChat()
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'jenkins.plugins.hipchat.HipChatNotifier'
+            children().size() == 11
+            token[0].value() == ''
+            room[0].value() == ''
+            startNotification[0].value() == false
+            notifySuccess[0].value() == false
+            notifyAborted[0].value() == false
+            notifyNotBuilt[0].value() == false
+            notifyUnstable[0].value() == false
+            notifyFailure[0].value() == false
+            notifyBackToNormal[0].value() == false
+            startJobMessage[0].value() == ''
+            completeJobMessage[0].value() == ''
+        }
+        1 * jobManagement.requireMinimumPluginVersion('hipchat', '0.1.9')
+    }
+
+    def 'hipChat notification with all options'() {
+        when:
+        context.hipChat {
+            rooms('foo', 'bar')
+            token('abcd')
+            notifyBuildStart()
+            notifySuccess()
+            notifyAborted()
+            notifyNotBuilt()
+            notifyUnstable()
+            notifyFailure()
+            notifyBackToNormal()
+            startJobMessage('JOB AT $URL')
+            completeJobMessage('JOB DONE! $URL')
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'jenkins.plugins.hipchat.HipChatNotifier'
+            children().size() == 11
+            token[0].value() == 'abcd'
+            room[0].value() == 'foo,bar'
+            startNotification[0].value() == true
+            notifySuccess[0].value() == true
+            notifyAborted[0].value() == true
+            notifyNotBuilt[0].value() == true
+            notifyUnstable[0].value() == true
+            notifyFailure[0].value() == true
+            notifyBackToNormal[0].value() == true
+            startJobMessage[0].value() == 'JOB AT $URL'
+            completeJobMessage[0].value() == 'JOB DONE! $URL'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('hipchat', '0.1.9')
+    }
+
+    def 'call publishOverSsh without server'() {
+        when:
+        context.publishOverSsh(null)
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call publishOverSsh without transferSet'() {
+        when:
+        context.publishOverSsh {
+            server('server-name') {
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call publishOverSsh without sourceFiles and execCommand'() {
+        when:
+        context.publishOverSsh {
+            server('server-name') {
+                transferSet {
+                }
+            }
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call publishOverSsh with minimal configuration and check the default values'() {
+        when:
+        context.publishOverSsh {
+            server('server-name') {
+                transferSet {
+                    sourceFiles('file')
+                    execCommand('command')
+                }
+            }
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'jenkins.plugins.publish__over__ssh.BapSshPublisherPlugin'
+            consolePrefix[0].value() == 'SSH: '
+            with(delegate.delegate[0]) {
+                with(publishers[0]) {
+                    children().size() == 1
+                    with(delegate.'jenkins.plugins.publish__over__ssh.BapSshPublisher'[0]) {
+                        configName[0].value() == 'server-name'
+                        verbose[0].value() == false
+                        with(transfers[0]) {
+                            children().size() == 1
+                            with(delegate.'jenkins.plugins.publish__over__ssh.BapSshTransfer'[0]) {
+                                remoteDirectory[0].value() == ''
+                                sourceFiles[0].value() == 'file'
+                                excludes[0].value() == ''
+                                removePrefix[0].value() == ''
+                                remoteDirectorySDF[0].value() == false
+                                flatten[0].value() == false
+                                cleanRemote[0].value() == false
+                                noDefaultExcludes[0].value() == false
+                                makeEmptyDirs[0].value() == false
+                                patternSeparator[0].value() == '[, ]+'
+                                execCommand[0].value() == 'command'
+                                execTimeout[0].value() == 120000
+                                usePty[0].value() == false
+                            }
+                        }
+                        useWorkspaceInPromotion[0].value() == false
+                        usePromotionTimestamp[0].value() == false
+                    }
+                }
+                continueOnError[0].value() == false
+                failOnError[0].value() == false
+                alwaysPublishFromMaster[0].value() == false
+                hostConfigurationAccess[0].@class == 'jenkins.plugins.publish_over_ssh.BapSshPublisherPlugin'
+                hostConfigurationAccess[0].@reference == '../..'
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('publish-over-ssh', '1.12')
+    }
+
+    def 'call publishOverSsh with complex configuration'() {
+        when:
+        context.publishOverSsh {
+            server('my-server-01') {
+                verbose()
+                credentials('user01') {
+                    pathToKey('path01')
+                }
+                retry(10, 10000)
+                label('server-01')
+                transferSet {
+                    sourceFiles('files')
+                    execCommand('command')
+                    removePrefix('prefix')
+                    remoteDirectory('directory')
+                    excludeFiles('exclude files')
+                    patternSeparator('[| ]+')
+                    noDefaultExcludes(true)
+                    makeEmptyDirs()
+                    flattenFiles()
+                    remoteDirIsDateFormat()
+                    execTimeout(11111)
+                    execInPty()
+                }
+                transferSet {
+                    sourceFiles('files2')
+                    execCommand('commands2')
+                }
+            }
+            server('my-server-02') {
+                verbose(true)
+                credentials('user2') {
+                    key('key')
+                }
+                retry(20, 20000)
+                label('server-02')
+                transferSet {
+                    sourceFiles('files3')
+                    execCommand('commands3')
+                }
+            }
+            continueOnError()
+            failOnError()
+            alwaysPublishFromMaster()
+            parameterizedPublishing('PARAMETER')
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'jenkins.plugins.publish__over__ssh.BapSshPublisherPlugin'
+            consolePrefix[0].value() == 'SSH: '
+            with(delegate.delegate[0]) {
+                with(publishers[0]) {
+                    children().size() == 2
+                    with(delegate.'jenkins.plugins.publish__over__ssh.BapSshPublisher'[0]) {
+                        configName[0].value() == 'my-server-01'
+                        verbose[0].value() == true
+                        with(transfers[0]) {
+                            children().size() == 2
+                            with(delegate.'jenkins.plugins.publish__over__ssh.BapSshTransfer'[0]) {
+                                remoteDirectory[0].value() == 'directory'
+                                sourceFiles[0].value() == 'files'
+                                excludes[0].value() == 'exclude files'
+                                removePrefix[0].value() == 'prefix'
+                                remoteDirectorySDF[0].value() == true
+                                flatten[0].value() == true
+                                cleanRemote[0].value() == false
+                                noDefaultExcludes[0].value() == true
+                                makeEmptyDirs[0].value() == true
+                                patternSeparator[0].value() == '[| ]+'
+                                execCommand[0].value() == 'command'
+                                execTimeout[0].value() == 11111
+                                usePty[0].value() == true
+                            }
+                            with(delegate.'jenkins.plugins.publish__over__ssh.BapSshTransfer'[1]) {
+                                sourceFiles[0].value() == 'files2'
+                                execCommand[0].value() == 'commands2'
+                            }
+                        }
+                        with(retry[0]) {
+                            delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshRetry'
+                            retries[0].value() == 10
+                            retryDelay[0].value() == 10000
+                        }
+                        with(label[0]) {
+                            delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshPublisherLabel'
+                            label[0].value() == 'server-01'
+                        }
+                        with(credentials[0]) {
+                            delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshCredentials'
+                            secretPassphrase[0].value() == ''
+                            key[0].value() == ''
+                            keyPath[0].value() == 'path01'
+                            username[0].value() == 'user01'
+                        }
+                    }
+                    with(delegate.'jenkins.plugins.publish__over__ssh.BapSshPublisher'[1]) {
+                        configName[0].value() == 'my-server-02'
+                        verbose[0].value() == true
+                        with(transfers[0]) {
+                            children().size() == 1
+                            with(delegate.'jenkins.plugins.publish__over__ssh.BapSshTransfer'[0]) {
+                                sourceFiles[0].value() == 'files3'
+                                execCommand[0].value() == 'commands3'
+                            }
+                        }
+                        with(retry[0]) {
+                            delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshRetry'
+                            retries[0].value() == 20
+                            retryDelay[0].value() == 20000
+                        }
+                        with(label[0]) {
+                            delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshPublisherLabel'
+                            label[0].value() == 'server-02'
+                        }
+                        with(credentials[0]) {
+                            delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshCredentials'
+                            secretPassphrase[0].value() == ''
+                            key[0].value() == 'key'
+                            keyPath[0].value() == ''
+                            username[0].value() == 'user2'
+                        }
+                    }
+                }
+                continueOnError[0].value() == true
+                failOnError[0].value() == true
+                alwaysPublishFromMaster[0].value() == true
+                hostConfigurationAccess[0].@class == 'jenkins.plugins.publish_over_ssh.BapSshPublisherPlugin'
+                hostConfigurationAccess[0].@reference == '../..'
+                with(paramPublish[0]) {
+                    delegate.@class == 'jenkins.plugins.publish_over_ssh.BapSshParamPublish'
+                    parameterName[0].value() == 'PARAMETER'
+                }
+            }
+        }
+        1 * jobManagement.requireMinimumPluginVersion('publish-over-ssh', '1.12')
     }
 }

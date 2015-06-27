@@ -1,15 +1,15 @@
 package javaposse.jobdsl.dsl.helpers.publisher
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 
 import static com.google.common.base.Preconditions.checkArgument
 import static com.google.common.base.Strings.isNullOrEmpty
 
-class GitPublisherContext implements Context {
-    private final JobManagement jobManagement
+class GitPublisherContext extends AbstractContext {
     boolean pushOnlyIfSuccess
     boolean pushMerge
     boolean forcePush
@@ -17,7 +17,7 @@ class GitPublisherContext implements Context {
     List<Node> branches = []
 
     GitPublisherContext(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+        super(jobManagement)
     }
 
     void pushOnlyIfSuccess(boolean pushOnlyIfSuccess = true) {
@@ -28,20 +28,14 @@ class GitPublisherContext implements Context {
         this.pushMerge = pushMerge
     }
 
+    /**
+     * @since 1.27
+     */
+    @RequiresPlugin(id = 'git', minimumVersion = '2.2.6')
     void forcePush(boolean forcePush = true) {
-        jobManagement.requireMinimumPluginVersion('git', '2.2.6')
         this.forcePush = forcePush
     }
 
-    /**
-     * <hudson.plugins.git.GitPublisher_-TagToPush>
-     *     <targetRepoName>origin</targetRepoName>
-     *     <tagName>foo-$PIPELINE_VERSION</tagName>
-     *     <tagMessage>Release $PIPELINE_VERSION</tagMessage>
-     *     <createTag>true</createTag>
-     *     <updateTag>false</updateTag>
-     * </hudson.plugins.git.GitPublisher_-TagToPush>
-     */
     void tag(String targetRepo, String name, @DslContext(TagToPushContext) Closure closure = null) {
         checkArgument(!isNullOrEmpty(targetRepo), 'targetRepo must be specified')
         checkArgument(!isNullOrEmpty(name), 'name must be specified')
@@ -58,12 +52,6 @@ class GitPublisherContext implements Context {
         }
     }
 
-    /**
-     * <hudson.plugins.git.GitPublisher_-BranchToPush>
-     *     <targetRepoName>origin</targetRepoName>
-     *     <branchName>master</branchName>
-     * </hudson.plugins.git.GitPublisher_-BranchToPush>
-     */
     void branch(String targetRepo, String name) {
         checkArgument(!isNullOrEmpty(targetRepo), 'targetRepo must be specified')
         checkArgument(!isNullOrEmpty(name), 'name must be specified')

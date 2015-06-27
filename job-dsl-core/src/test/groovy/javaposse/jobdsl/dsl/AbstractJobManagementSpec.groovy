@@ -1,6 +1,5 @@
 package javaposse.jobdsl.dsl
 
-import hudson.util.VersionNumber
 import spock.lang.Specification
 
 import static org.codehaus.groovy.runtime.InvokerHelper.createScript
@@ -92,30 +91,7 @@ class AbstractJobManagementSpec extends Specification {
         buffer.toString().trim() == 'Warning: foo is deprecated (test.groovy, line 12)'
     }
 
-    def 'reading files from workspace is not supported'() {
-        setup:
-        AbstractJobManagement jobManagement = new TestJobManagement()
-
-        when:
-        jobManagement.readFileInWorkspace('test.txt')
-
-        then:
-        thrown(UnsupportedOperationException)
-
-        when:
-        jobManagement.streamFileInWorkspace('test.txt')
-
-        then:
-        thrown(UnsupportedOperationException)
-
-        when:
-        jobManagement.readFileInWorkspace('my-job', 'test.txt')
-
-        then:
-        thrown(UnsupportedOperationException)
-    }
-
-    static class TestJobManagement extends AbstractJobManagement {
+    static class TestJobManagement extends MockJobManagement {
         TestJobManagement() {
             super()
         }
@@ -125,17 +101,12 @@ class AbstractJobManagementSpec extends Specification {
         }
 
         @Override
-        Map<String, String> getParameters() {
-            throw new UnsupportedOperationException()
-        }
-
-        @Override
         String getConfig(String jobName) {
             throw new UnsupportedOperationException()
         }
 
         @Override
-        boolean createOrUpdateConfig(String jobName, String config, boolean ignoreExisting) {
+        boolean createOrUpdateConfig(Item item, boolean ignoreExisting) throws NameNotProvidedException {
             throw new UnsupportedOperationException()
         }
 
@@ -145,38 +116,13 @@ class AbstractJobManagementSpec extends Specification {
         }
 
         @Override
-        String createOrUpdateConfigFile(ConfigFile configFile, boolean ignoreExisting) {
+        InputStream streamFileInWorkspace(String filePath) throws IOException {
             throw new UnsupportedOperationException()
         }
 
         @Override
-        void renameJobMatching(String previousNames, String destination) throws IOException {
+        String readFileInWorkspace(String filePath) throws IOException {
             throw new UnsupportedOperationException()
-        }
-
-        @Override
-        void requireMinimumPluginVersion(String pluginShortName, String version) {
-            throw new UnsupportedOperationException()
-        }
-
-        @Override
-        String getCredentialsId(String credentialsDescription) {
-            null
-        }
-
-        @Override
-        VersionNumber getPluginVersion(String pluginShortName) {
-            null
-        }
-
-        @Override
-        Integer getVSphereCloudHash(String name) {
-            null
-        }
-
-        @Override
-        String getConfigFileId(ConfigFileType type, String name) {
-            null
         }
 
         void testMethod() {

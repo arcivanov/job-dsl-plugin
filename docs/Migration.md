@@ -1,3 +1,287 @@
+## Migrating to 1.35
+
+## S3
+
+Support for versions 0.6 and earlier of the S3 Plugin is [[deprecated|Deprecation-Policy]] and will be removed. The
+region identifiers have changed with version 0.7 of the S3 Plugin.
+
+DSL prior to 1.35
+```groovy
+job('example') {
+    publishers {
+        s3('example') {
+            entry('foo', 'bar', 'EU_WEST_1')
+        }
+    }
+}
+```
+
+DSL since to 1.35
+```groovy
+job('example') {
+    publishers {
+        s3('example') {
+            entry('foo', 'bar', 'eu-west-1')
+        }
+    }
+}
+```
+
+## Migrating to 1.34
+
+### Conditional Build Steps
+
+An undocumented variant of the `runner` method in `conditionalSteps` and the `EvaluationRunners` enum have been
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+DSL prior to 1.34
+```groovy
+import javaposse.jobdsl.dsl.helpers.step.ConditionalStepsContext
+
+steps {
+    conditionalSteps {
+        condition {
+            alwaysRun()
+        }
+        runner(ConditionalStepsContext.EvaluationRunners.Fail)
+        shell('echo "Hello World!"')
+    }
+}
+```
+
+DSL since to 1.34
+```groovy
+steps {
+    conditionalSteps {
+        condition {
+            alwaysRun()
+        }
+        runner('Fail')
+        shell('echo "Hello World!"')
+    }
+}
+```
+
+## Migrating to 1.33
+
+### Archive Artifacts
+
+The `latestOnly` option is deprecated in newer versions of Jenkins and therefore it's also
+[[deprecated|Deprecation-Policy]] in the DSL and will be removed. Use `logRotator` to configure which artifacts to keep.
+
+DSL prior to 1.33
+```groovy
+job('example-1') {
+    publishers {
+        archiveArtifacts('*.xml', null, true)
+    }
+}
+
+job('example-2') {
+    publishers {
+        archiveArtifacts {
+            pattern('*.xml')
+            latestOnly()
+        }
+    }
+}
+```
+
+DSL since 1.33
+```groovy
+job('example-1') {
+    logRotator(-1, -1, -1, 1)
+    publishers {
+        archiveArtifacts('*.xml')
+    }
+}
+
+job('example-2') {
+    logRotator(-1, -1, -1, 1)
+    publishers {
+        archiveArtifacts {
+            pattern('*.xml')
+        }
+    }
+}
+```
+
+### Copy Artifacts
+
+Support for versions 1.30 and earlier of the Copy Artifact Plugin is [[deprecated|Deprecation-Policy]] and will be
+removed.
+
+All variants of `copyArtifacts` with more than two parameters have been replaced by a nested context and are deprecated.
+
+DSL prior to 1.33
+```groovy
+job('example') {
+    steps {
+        copyArtifacts('other-1', '*.xml') {
+            latestSaved()
+        }
+        copyArtifacts('other-2', '*.txt', 'files') {
+            buildNumber(5)
+        }
+        copyArtifacts('other-3', '*.csv', 'target', true) {
+            latestSuccessful(true)
+        }
+        copyArtifacts('other-4', 'build/*.jar', 'libs', true, true) {
+            upstreamBuild()
+        }
+    }
+}
+```
+
+DSL since 1.33
+```groovy
+job('example') {
+    steps {
+        copyArtifacts('other-1') {
+            includePatterns('*.xml')
+            buildSelector {
+                latestSaved()
+            }
+        }
+        copyArtifacts('other-2') {
+            includePatterns('*.txt')
+            targetDirectory('files')
+            buildSelector {
+                buildNumber(5)
+            }
+        }
+        copyArtifacts('other-3') {
+            includePatterns('*.csv')
+            targetDirectory('target')
+            flatten()
+            buildSelector {
+                latestSuccessful(true)
+            }
+        }
+        copyArtifacts('other-4') {
+            includePatterns('build/*.jar')
+            targetDirectory('libs')
+            flatten()
+            optional()
+            buildSelector {
+                upstreamBuild()
+            }
+        }
+    }
+}
+```
+
+### Robot Framework
+
+Support for versions older than 1.4.3 of the
+[Robot Framework Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+### Mercurial
+
+Support for versions older than 1.50.1 of the
+[Mercurial Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Mercurial+Plugin) is [[deprecated|Deprecation-Policy]]
+and will be removed.
+
+### Flexible Publish
+
+Support for versions older than 0.13 of the
+[Flexible Publish Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Flexible+Publish+Plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+## Migrating to 1.31
+
+### Nested Views
+
+The views closure of the nested view type has been changed to use the same method signatures than the top-level factory
+methods.
+
+DSL prior to 1.31
+```groovy
+nestedView('project-a') {
+    views {
+        view('overview') {
+        }
+        view('pipeline', type: BuildPipelineView) {
+        }
+    }
+}
+```
+
+DSL since 1.31
+```groovy
+nestedView('project-a') {
+    views {
+        listView('overview') {
+        }
+        buildPipelineView('pipeline') {
+        }
+    }
+}
+```
+
+### MultiJob Plugin
+
+Support for version 1.12 and earlier of the MultiJob Plugin is [[deprecated|Deprecation-Policy]] and will be removed.
+
+### Local Maven Repository Location
+
+The `localRepository` method with a `javaposse.jobdsl.dsl.helpers.common.MavenContext.LocalRepositoryLocation` argument
+has been [[deprecated|Deprecation-Policy]] and replaced by a method with a
+`javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation` argument. The values of the enum have been renamed from camel
+case to upper case to follow the naming convention for enum values. The new enum is implicitly imported, but not with
+star import as the new deprecated variant.
+
+DSL prior to 1.31
+```groovy
+mavenJob {
+    localRepository(LocalToWorkspace)
+}
+job {
+    steps {
+        maven {
+            localRepository(LocalToWorkspace)
+        }
+    }
+}
+```
+
+DSL since 1.31
+```groovy
+mavenJob {
+    localRepository(LocalRepositoryLocation.LOCAL_TO_WORKSPACE)
+}
+job {
+    steps {
+        maven {
+            localRepository(LocalRepositoryLocation.LOCAL_TO_WORKSPACE)
+        }
+    }
+}
+```
+
+### Permissions
+
+The Permissions enum has been deprecated because it can not reflect all permissions that are available at runtime.
+
+DSL prior to 1.31
+```groovy
+job {
+    permission(Permissions.ItemRead, 'jill')
+    permission('RunUpdate', 'joe')
+}
+```
+
+DSL since 1.31
+```groovy
+job {
+    authorization {
+        permission('hudson.model.Item.Read', 'jill')
+        permission('hudson.model.Run.Update', 'joe')
+    }
+}
+```
+
 ## Migrating to 1.30
 
 ### Factory and Name Methods
@@ -116,8 +400,6 @@ job {
     }
 }
 ```
-
-## Migrating to 1.29
 
 ### Build Timeout
 

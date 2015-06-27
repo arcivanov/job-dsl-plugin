@@ -14,8 +14,12 @@ import javaposse.jobdsl.dsl.ConfigFile
 import javaposse.jobdsl.dsl.ConfigFileType
 import javaposse.jobdsl.dsl.ConfigurationMissingException
 import javaposse.jobdsl.dsl.DslException
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.NameNotProvidedException
+import javaposse.jobdsl.dsl.UserContent
+import javaposse.jobdsl.dsl.helpers.step.StepContext
+import org.custommonkey.xmlunit.XMLUnit
 import org.junit.Rule
 import org.jvnet.hudson.test.JenkinsRule
 import org.jvnet.hudson.test.WithoutJenkins
@@ -102,6 +106,95 @@ class JenkinsJobManagementSpec extends Specification {
         buffer.size() == 0
     }
 
+    def 'requireMinimumCoreVersion success'() {
+        when:
+        jobManagement.requireMinimumCoreVersion('1.480')
+
+        then:
+        0 * build.setResult(UNSTABLE)
+        buffer.size() == 0
+    }
+
+    def 'requireMinimumCoreVersion failed'() {
+        when:
+        jobManagement.requireMinimumCoreVersion('1.600')
+
+        then:
+        1 * build.setResult(UNSTABLE)
+        buffer.size() > 0
+    }
+
+    def 'callExtension not found'() {
+        when:
+        Node result = jobManagement.callExtension('foo', Mock(Item), StepContext)
+
+        then:
+        result == null
+    }
+
+    def 'callExtension with no args'() {
+        when:
+        Node result = jobManagement.callExtension('test', Mock(Item), StepContext)
+
+        then:
+        isXmlIdentical('extension.xml', result)
+    }
+
+    def 'callExtension defined twice'() {
+        when:
+        jobManagement.callExtension('twice', Mock(Item), StepContext)
+
+        then:
+        Exception e = thrown(DslException)
+        e.message.contains(TestContextExtensionPoint.name)
+        e.message.contains(TestContextExtensionPoint2.name)
+    }
+
+    def 'callExtension with object result'() {
+        when:
+        Node result = jobManagement.callExtension('testComplexObject', Mock(Item), StepContext, 'foo', 42, true)
+
+        then:
+        isXmlIdentical('extension.xml', result)
+    }
+
+    def 'callExtension with closure'() {
+        setup:
+        Closure closure = {
+            value1('foo')
+            value2(42)
+            value3(true)
+        }
+
+        when:
+        Node result = jobManagement.callExtension('withNestedContext', Mock(Item), StepContext, closure)
+
+        then:
+        isXmlIdentical('extension.xml', result)
+    }
+
+    def 'callExtension with environment'() {
+        when:
+        Node result = jobManagement.callExtension('withEnvironment', Mock(Item), StepContext, 'foo', 42, true)
+
+        then:
+        isXmlIdentical('extension.xml', result)
+    }
+
+    def 'extension is being notified'() {
+        when:
+        jobManagement.createOrUpdateConfig('test-123', loadResource('config.xml'), true)
+
+        then:
+        ContextExtensionPoint.all().get(TestContextExtensionPoint).isItemCreated('test-123')
+
+        when:
+        jobManagement.createOrUpdateConfig('test-123', loadResource('config2.xml'), false)
+
+        then:
+        ContextExtensionPoint.all().get(TestContextExtensionPoint).isItemUpdated('test-123')
+    }
+
     def 'create job with nonexisting parent'() {
         when:
         jobManagement.createOrUpdateConfig(
@@ -186,6 +279,18 @@ class JenkinsJobManagementSpec extends Specification {
         jenkinsRule.jenkins.getItemByFullName('oldFolder/oldName') == null
     }
 
+    def 'move job to non-existing folder'() {
+        setup:
+        jenkinsRule.createFreeStyleProject('bar')
+
+        when:
+        jobManagement.renameJobMatching('bar', 'foo/bar')
+
+        then:
+        Exception e = thrown(DslException)
+        e.message == 'Could not rename job bar to foo/bar, destination folder does not exist'
+    }
+
     def 'createOrUpdateConfig relative to folder'() {
         setup:
         Folder folder = jenkinsRule.jenkins.createProject(Folder, 'folder')
@@ -248,6 +353,14 @@ class JenkinsJobManagementSpec extends Specification {
 
         then:
         version == null
+    }
+
+    def 'getJenkinsVersion returns a version'() {
+        when:
+        VersionNumber versionNumber = jobManagement.jenkinsVersion
+
+        then:
+        versionNumber != null
     }
 
     def 'get vSphere cloud hash without vSphere cloud plugin'() {
@@ -409,5 +522,103 @@ class JenkinsJobManagementSpec extends Specification {
         then:
         Exception e = thrown(IllegalStateException)
         e.message.contains(fileName)
+    }
+
+    def 'get all job permissions'() {
+        setup:
+        String propertyName = 'hudson.security.AuthorizationMatrixProperty'
+
+        when:
+        Set<String> permissions = jobManagement.getPermissions(propertyName)
+
+        then:
+        'hudson.model.Item.Delete' in permissions
+        'hudson.model.Item.Configure' in permissions
+        'hudson.model.Item.Read' in permissions
+        'hudson.model.Item.Discover' in permissions
+        'hudson.model.Item.Build' in permissions
+        'hudson.model.Item.Workspace' in permissions
+        'hudson.model.Item.Cancel' in permissions
+        'hudson.model.Item.Move' in permissions
+        'hudson.model.Run.Delete' in permissions
+        'hudson.model.Run.Update' in permissions
+        'hudson.scm.SCM.Tag' in permissions
+    }
+
+    def 'get all folder permissions'() {
+        setup:
+        String propertyName = 'com.cloudbees.hudson.plugins.folder.properties.AuthorizationMatrixProperty'
+
+        when:
+        Set<String> permissions = jobManagement.getPermissions(propertyName)
+
+        then:
+        'hudson.model.Item.Create' in permissions
+        'hudson.model.Item.Delete' in permissions
+        'hudson.model.Item.Configure' in permissions
+        'hudson.model.Item.Read' in permissions
+        'hudson.model.Item.Discover' in permissions
+        'hudson.model.Item.Build' in permissions
+        'hudson.model.Item.Workspace' in permissions
+        'hudson.model.Item.Cancel' in permissions
+        'hudson.model.Item.Move' in permissions
+        'hudson.model.Run.Delete' in permissions
+        'hudson.model.Run.Update' in permissions
+    }
+
+    def 'upload user content'(boolean ignoreExisting) {
+        setup:
+        UserContent userContent = new UserContent('foo.txt', new ByteArrayInputStream('foo'.bytes))
+
+        when:
+        jobManagement.createOrUpdateUserContent(userContent, ignoreExisting)
+
+        then:
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').exists()
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').readToString() == 'foo'
+
+        where:
+        ignoreExisting << [true, false]
+    }
+
+    def 'update user content'() {
+        setup:
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').write('lorem ipsum', 'UTF-8')
+        UserContent userContent = new UserContent('foo.txt', new ByteArrayInputStream('foo'.bytes))
+
+        when:
+        jobManagement.createOrUpdateUserContent(userContent, false)
+
+        then:
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').exists()
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').readToString() == 'foo'
+    }
+
+    def 'do not update existing user content'() {
+        setup:
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').write('lorem ipsum', 'UTF-8')
+        UserContent userContent = new UserContent('foo.txt', new ByteArrayInputStream('foo'.bytes))
+
+        when:
+        jobManagement.createOrUpdateUserContent(userContent, true)
+
+        then:
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').exists()
+        jenkinsRule.instance.rootPath.child('userContent').child('foo.txt').readToString() == 'lorem ipsum'
+    }
+
+    private static boolean isXmlIdentical(String expected, Node actual) throws Exception {
+        XMLUnit.ignoreWhitespace = true
+        XMLUnit.compareXML(loadResource(expected), nodeToString(actual)).identical()
+    }
+
+    private static String nodeToString(Node node) {
+        StringWriter writer = new StringWriter()
+        new XmlNodePrinter(new PrintWriter(writer)).print(node)
+        writer.toString()
+    }
+
+    private static String loadResource(String resourceName) {
+        Resources.toString(getResource(resourceName), UTF_8)
     }
 }

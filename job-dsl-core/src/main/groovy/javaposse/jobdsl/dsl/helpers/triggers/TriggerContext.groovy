@@ -1,19 +1,27 @@
 package javaposse.jobdsl.dsl.helpers.triggers
 
 import com.google.common.base.Preconditions
-import javaposse.jobdsl.dsl.Context
+import com.google.common.base.Strings
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
+import javaposse.jobdsl.dsl.helpers.AbstractExtensibleContext
+import javaposse.jobdsl.dsl.helpers.common.DownstreamContext
 import javaposse.jobdsl.dsl.helpers.triggers.GerritContext.GerritSpec
 
-class TriggerContext implements Context {
-    protected final JobManagement jobManagement
+class TriggerContext extends AbstractExtensibleContext {
     final List<Node> triggerNodes = []
 
-    TriggerContext(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+    TriggerContext(JobManagement jobManagement, Item item) {
+        super(jobManagement, item)
+    }
+
+    @Override
+    protected void addExtensionNode(Node node) {
+        triggerNodes << node
     }
 
     /**
@@ -21,7 +29,9 @@ class TriggerContext implements Context {
      *
      * @param crontab crontab execution spec
      * @param contextClosure closure for configuring the context
+     * @since 1.16
      */
+    @RequiresPlugin(id = 'urltrigger')
     void urlTrigger(String crontab = null, @DslContext(UrlTriggerContext) Closure contextClosure) {
         UrlTriggerContext urlTriggerContext = new UrlTriggerContext(crontab)
         ContextHelper.executeInContext(contextClosure, urlTriggerContext)
@@ -84,30 +94,30 @@ class TriggerContext implements Context {
 
     void cron(String cronString) {
         Preconditions.checkNotNull(cronString)
+
         triggerNodes << new NodeBuilder().'hudson.triggers.TimerTrigger' {
             spec cronString
         }
     }
 
-    /**
-     * <hudson.triggers.SCMTrigger>
-     *     <spec>10 * * * *</spec>
-     * </hudson.triggers.SCMTrigger>
-     */
-    void scm(String cronString) {
+    void scm(String cronString, @DslContext(ScmTriggerContext) Closure scmTriggerClosure = null) {
         Preconditions.checkNotNull(cronString)
+
+        ScmTriggerContext scmTriggerContext = new ScmTriggerContext()
+        ContextHelper.executeInContext(scmTriggerClosure, scmTriggerContext)
+
         triggerNodes << new NodeBuilder().'hudson.triggers.SCMTrigger' {
             spec cronString
+            ignorePostCommitHooks scmTriggerContext.ignorePostCommitHooks
         }
     }
 
     /**
-     * Trigger that runs jobs on push notifications from Github/Github enterprise.
+     * Trigger that runs jobs on push notifications from GitHub.
      *
-     * <com.cloudbees.jenkins.GitHubPushTrigger>
-     *     <spec/>
-     * </com.cloudbees.jenkins.GitHubPushTrigger>
+     * @since 1.16
      */
+    @RequiresPlugin(id = 'github')
     void githubPush() {
         triggerNodes << new NodeBuilder().'com.cloudbees.jenkins.GitHubPushTrigger' {
             spec ''
@@ -115,24 +125,13 @@ class TriggerContext implements Context {
     }
 
     /**
-     *  Configures the Jenkins GitHub pull request builder plugin
-     *  Depends on the github-api, github, and git plugins
+     * Configures the Jenkins GitHub pull request builder plugin.
      *
-     *  <org.jenkinsci.plugins.ghprb.GhprbTrigger>
-     *      <adminlist></adminlist>
-     *      <whitelist></whitelist>
-     *      <orgslist></orgslist>
-     *      <cron></cron>
-     *      <spec></spec>
-     *      <triggerPhrase></triggerPhrase>
-     *      <onlyTriggerPhrase>false</onlyTriggerPhrase>
-     *      <useGitHubHooks>true</useGitHubHooks>
-     *      <permitAll>true</permitAll>
-     *      <autoCloseFailedPullRequests>false</autoCloseFailedPullRequests>
-     *  </org.jenkinsci.plugins.ghprb.GhprbTrigger>
+     * @since 1.22
      */
+    @RequiresPlugin(id = 'ghprb')
     void pullRequest(@DslContext(PullRequestBuilderContext) Closure contextClosure) {
-        PullRequestBuilderContext pullRequestBuilderContext = new PullRequestBuilderContext()
+        PullRequestBuilderContext pullRequestBuilderContext = new PullRequestBuilderContext(jobManagement)
         ContextHelper.executeInContext(contextClosure, pullRequestBuilderContext)
 
         triggerNodes << new NodeBuilder().'org.jenkinsci.plugins.ghprb.GhprbTrigger' {
@@ -141,55 +140,19 @@ class TriggerContext implements Context {
             orgslist pullRequestBuilderContext.orgWhitelist.join('\n')
             delegate.cron(pullRequestBuilderContext.cron)
             spec pullRequestBuilderContext.cron
-            triggerPhrase pullRequestBuilderContext.triggerPhrase
+            triggerPhrase pullRequestBuilderContext.triggerPhrase ?: ''
             onlyTriggerPhrase pullRequestBuilderContext.onlyTriggerPhrase
             useGitHubHooks pullRequestBuilderContext.useGitHubHooks
             permitAll pullRequestBuilderContext.permitAll
             autoCloseFailedPullRequests pullRequestBuilderContext.autoCloseFailedPullRequests
+            commentFilePath pullRequestBuilderContext.commentFilePath ?: ''
         }
     }
 
-    /**
-     * <com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.GerritTrigger>
-     *     <spec></spec>
-     *     <gerritProjects>
-     *         <com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.GerritProject>
-     *             <compareType>PLAIN</compareType>
-     *             <pattern>test-project</pattern>
-     *             <branches>
-     *                 <com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.Branch>
-     *                    <compareType>ANT</compareType>
-     *                    <pattern>**</pattern>
-     *                 </com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.Branch>
-     *             </branches>
-     *         </com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.data.GerritProject>
-     *     </gerritProjects>
-     *     <silentMode>false</silentMode>
-     *     <escapeQuotes>true</escapeQuotes>
-     *     <buildStartMessage></buildStartMessage>
-     *     <buildFailureMessage></buildFailureMessage>
-     *     <buildSuccessfulMessage></buildSuccessfulMessage>
-     *     <buildUnstableMessage></buildUnstableMessage>
-     *     <buildNotBuiltMessage></buildNotBuiltMessage>
-     *     <buildUnsuccessfulFilepath></buildUnsuccessfulFilepath>
-     *     <customUrl></customUrl>
-     *     <triggerOnEvents>
-     *         <com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.events.PluginChangeMergedEvent/>
-     *         <com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.events.PluginPatchsetCreatedEvent/>
-     *     </triggerOnEvents>
-     *     <dynamicTriggerConfiguration>false</dynamicTriggerConfiguration>
-     *     <triggerConfigURL></triggerConfigURL>
-     *     <triggerInformationAction/>
-     * </com.sonyericsson.hudson.plugins.gerrit.trigger.hudsontrigger.GerritTrigger>
-     *
-     * @param triggerEvents Can be ommited and the plugin will user PatchsetCreated and DraftPublished by default.
-     *                      Provide in show name format: ChangeMerged, CommentAdded, DraftPublished, PatchsetCreated,
-     *                      RefUpdated
-     * @return
-     */
+    @RequiresPlugin(id = 'gerrit-trigger')
     void gerrit(@DslContext(GerritContext) Closure contextClosure = null) {
         // See what they set up in the contextClosure before generating xml
-        GerritContext gerritContext = new GerritContext(jobManagement)
+        GerritContext gerritContext = new GerritContext()
         ContextHelper.executeInContext(contextClosure, gerritContext)
 
         NodeBuilder nodeBuilder = new NodeBuilder()
@@ -273,5 +236,53 @@ class TriggerContext implements Context {
         }
 
         triggerNodes << gerritNode
+    }
+
+    /**
+     * @since 1.33
+     */
+    void upstream(String projects, String threshold = 'SUCCESS') {
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(projects), 'projects must be specified')
+        Preconditions.checkArgument(
+                DownstreamContext.THRESHOLD_COLOR_MAP.containsKey(threshold),
+                "threshold must be one of ${DownstreamContext.THRESHOLD_COLOR_MAP.keySet().join(', ')}"
+        )
+
+        triggerNodes << new NodeBuilder().'jenkins.triggers.ReverseBuildTrigger' {
+            spec()
+            upstreamProjects(projects)
+            delegate.threshold {
+                name(threshold)
+                ordinal(DownstreamContext.THRESHOLD_ORDINAL_MAP[threshold])
+                color(DownstreamContext.THRESHOLD_COLOR_MAP[threshold])
+                completeBuild(true)
+            }
+        }
+    }
+
+    /**
+     * Allows to schedule a build on Jenkins after a job execution on RunDeck.
+     *
+     * @since 1.33
+     */
+    @RequiresPlugin(id = 'rundeck', minimumVersion = '3.4')
+    void rundeck(@DslContext(RundeckTriggerContext) Closure closure = null) {
+        RundeckTriggerContext context = new RundeckTriggerContext()
+        ContextHelper.executeInContext(closure, context)
+
+        triggerNodes << new NodeBuilder().'org.jenkinsci.plugins.rundeck.RundeckTrigger' {
+            spec()
+            filterJobs(context.filterJobs)
+            jobsIdentifiers {
+                context.jobIdentifiers.each { String jobsIdentifier ->
+                    string(jobsIdentifier)
+                }
+            }
+            executionStatuses {
+                context.executionStatuses.each { String status ->
+                    string(status)
+                }
+            }
+        }
     }
 }

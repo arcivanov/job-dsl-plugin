@@ -1,9 +1,9 @@
 package javaposse.jobdsl.dsl
 
 import com.google.common.base.Preconditions
-import javaposse.jobdsl.dsl.helpers.AuthorizationContext
 import javaposse.jobdsl.dsl.helpers.BuildParametersContext
-import javaposse.jobdsl.dsl.helpers.Permissions
+import javaposse.jobdsl.dsl.helpers.JobAuthorizationContext
+import javaposse.jobdsl.dsl.helpers.properties.PropertiesContext
 import javaposse.jobdsl.dsl.helpers.ScmContext
 import javaposse.jobdsl.dsl.helpers.publisher.PublisherContext
 import javaposse.jobdsl.dsl.helpers.step.StepContext
@@ -27,6 +27,7 @@ abstract class Job extends Item {
 
     /**
      * Creates a new job configuration, based on the job template referenced by the parameter and stores this.
+     *
      * @param templateName the name of the template upon which to base the new job
      * @return a new graph of groovy.util.Node objects, representing the job configuration structure
      * @throws JobTemplateMissingException
@@ -34,12 +35,6 @@ abstract class Job extends Item {
     void using(String templateName) throws JobTemplateMissingException {
         Preconditions.checkState(this.templateName == null, 'Can only use "using" once')
         this.templateName = templateName
-    }
-
-    @Deprecated
-    void name(Closure nameClosure) {
-        jobManagement.logDeprecationWarning()
-        name(nameClosure.call().toString())
     }
 
     void description(String descriptionString) {
@@ -53,6 +48,8 @@ abstract class Job extends Item {
      * Renames jobs matching the regular expression (fullName) to the name of
      * this job before the configuration is updated.
      * This can be useful to keep the build history.
+     *
+     * @since 1.29
      */
     void previousNames(String regex) {
         this.previousNamesRegex = regex
@@ -60,7 +57,7 @@ abstract class Job extends Item {
 
     /**
      * "Restrict where this project can be run"
-     * <assignedNode>FullTools&amp;&amp;RPM&amp;&amp;DC</assignedNode>
+     *
      * @param labelExpression Label of node to use, if null is passed in, the label is cleared out and it can roam
      * @return
      */
@@ -78,24 +75,12 @@ abstract class Job extends Item {
 
     /**
      * Add environment variables to the build.
-     *
-     * <project>
-     *   <properties>
-     *     <EnvInjectJobProperty>
-     *       <info>
-     *         <propertiesContent>TEST=foo BAR=123</propertiesContent>
-     *         <loadFilesFromMaster>false</loadFilesFromMaster>
-     *       </info>
-     *       <on>true</on>
-     *       <keepJenkinsSystemVariables>true</keepJenkinsSystemVariables>
-     *       <keepBuildVariables>true</keepBuildVariables>
-     *       <contributors/>
-     *     </EnvInjectJobProperty>
      */
     void environmentVariables(@DslContext(EnvironmentVariableContext) Closure envClosure) {
         environmentVariables(null, envClosure)
     }
 
+    @RequiresPlugin(id = 'envinject')
     void environmentVariables(Map<Object, Object> vars,
                               @DslContext(EnvironmentVariableContext) Closure envClosure = null) {
         EnvironmentVariableContext envContext = new EnvironmentVariableContext(jobManagement)
@@ -117,20 +102,9 @@ abstract class Job extends Item {
     }
 
     /**
-     * <project>
-     *     <properties>
-     *         <hudson.plugins.throttleconcurrents.ThrottleJobProperty>
-     *             <maxConcurrentPerNode>0</maxConcurrentPerNode>
-     *             <maxConcurrentTotal>0</maxConcurrentTotal>
-     *             <categories>
-     *                 <string>CDH5-repo-update</string>
-     *             </categories>
-     *             <throttleEnabled>true</throttleEnabled>
-     *             <throttleOption>category</throttleOption>
-     *         </hudson.plugins.throttleconcurrents.ThrottleJobProperty>
-     *     <properties>
-     * </project>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'throttle-concurrents')
     void throttleConcurrentBuilds(@DslContext(ThrottleConcurrentBuildsContext) Closure throttleClosure) {
         ThrottleConcurrentBuildsContext throttleContext = new ThrottleConcurrentBuildsContext()
         ContextHelper.executeInContext(throttleClosure, throttleContext)
@@ -155,16 +129,9 @@ abstract class Job extends Item {
     }
 
     /**
-     * <project>
-     *     <properties>
-     *         <org.jenkins.plugins.lockableresources.RequiredResourcesProperty>
-     *             <resourceNames>lock-resource</resourceNames>
-     *             <resourceNamesVar>NAMES</resourceNamesVar>
-     *             <resourceNumber>0</resourceNumber>
-     *         </org.jenkins.plugins.lockableresources.RequiredResourcesProperty>
-     *     <properties>
-     * </project>
+     * @since 1.25
      */
+    @RequiresPlugin(id = 'lockable-resources')
     void lockableResources(String resources, @DslContext(LockableResourcesContext) Closure lockClosure = null) {
         LockableResourcesContext lockContext = new LockableResourcesContext()
         ContextHelper.executeInContext(lockClosure, lockContext)
@@ -182,9 +149,6 @@ abstract class Job extends Item {
         }
     }
 
-    /**
-     * <disabled>true</disabled>
-     */
     void disabled(boolean shouldDisable = true) {
         withXmlActions << WithXmlAction.create { Node project ->
             Node node = methodMissing('disabled', shouldDisable)
@@ -192,34 +156,35 @@ abstract class Job extends Item {
         }
     }
 
-    /**
-     * <logRotator>
-     *     <daysToKeep>14</daysToKeep>
-     *     <numToKeep>50</numToKeep>
-     *     <artifactDaysToKeep>5</artifactDaysToKeep>
-     *     <artifactNumToKeep>20</artifactNumToKeep>
-     * </logRotator>
-     */
-    void logRotator(int daysToKeepInt = -1, int numToKeepInt = -1,
-                   int artifactDaysToKeepInt = -1, int artifactNumToKeepInt = -1) {
-        withXmlActions << WithXmlAction.create { Node project ->
-            project / logRotator {
-                daysToKeep daysToKeepInt
-                numToKeep numToKeepInt
-                artifactDaysToKeep artifactDaysToKeepInt
-                artifactNumToKeep artifactNumToKeepInt
-            }
+    void logRotator(int daysToKeep = -1, int numToKeep = -1, int artifactDaysToKeep = -1, int artifactNumToKeep = -1) {
+        logRotator {
+            delegate.daysToKeep(daysToKeep)
+            delegate.numToKeep(numToKeep)
+            delegate.artifactDaysToKeep(artifactDaysToKeep)
+            delegate.artifactNumToKeep(artifactNumToKeep)
         }
     }
 
     /**
-     * Block build if certain jobs are running
-     * <properties>
-     *     <hudson.plugins.buildblocker.BuildBlockerProperty>
-     *         <useBuildBlocker>true</useBuildBlocker>  <!-- Always true -->
-     *         <blockingJobs>JobA</blockingJobs>
-     *     </hudson.plugins.buildblocker.BuildBlockerProperty>
-     * </properties>
+     * @since 1.35
+     */
+    void logRotator(@DslContext(LogRotatorContext) Closure closure) {
+        LogRotatorContext context = new LogRotatorContext()
+        ContextHelper.executeInContext(closure, context)
+
+        withXmlActions << WithXmlAction.create { Node project ->
+            Node node = methodMissing('logRotator') {
+                daysToKeep(context.daysToKeep)
+                numToKeep(context.numToKeep)
+                artifactDaysToKeep(context.artifactDaysToKeep)
+                artifactNumToKeep(context.artifactNumToKeep)
+            }
+            project / node
+        }
+    }
+
+    /**
+     * Block build if certain jobs are running.
      */
     void blockOn(Iterable<String> projectNames) {
         blockOn(projectNames.join('\n'))
@@ -227,9 +192,10 @@ abstract class Job extends Item {
 
     /**
      * Block build if certain jobs are running.
+     *
      * @param projectName Can be regular expressions. Newline delimited.
-     * @return
      */
+    @RequiresPlugin(id = 'build-blocker-plugin')
     void blockOn(String projectName) {
         withXmlActions << WithXmlAction.create { Node project ->
             project / 'properties' / 'hudson.plugins.buildblocker.BuildBlockerProperty' {
@@ -241,6 +207,7 @@ abstract class Job extends Item {
 
     /**
      * Name of the JDK installation to use for this job.
+     *
      * @param jdkArg name of the JDK installation to use for this job.
      */
     void jdk(String jdkArg) {
@@ -251,16 +218,12 @@ abstract class Job extends Item {
     }
 
     /**
-     * Priority of this job. Requires the
-     * <a href="https://wiki.jenkins-ci.org/display/JENKINS/Priority+Sorter+Plugin">Priority Sorter Plugin</a>.
+     * Priority of this job.
      * Default value is 100.
      *
-     * <properties>
-     *     <hudson.queueSorter.PrioritySorterJobProperty plugin="PrioritySorter@1.3">
-     *         <priority>100</priority>
-     *     </hudson.queueSorter.PrioritySorterJobProperty>
-     * </properties>
+     * @since 1.15
      */
+    @RequiresPlugin(id = 'PrioritySorter')
     void priority(int value) {
         withXmlActions << WithXmlAction.create { Node project ->
             Node node = new Node(project / 'properties', 'hudson.queueSorter.PrioritySorterJobProperty')
@@ -272,6 +235,7 @@ abstract class Job extends Item {
      * Adds a quiet period to the project.
      *
      * @param seconds number of seconds to wait
+     * @since 1.16
      */
     void quietPeriod(int seconds = 5) {
         withXmlActions << WithXmlAction.create { Node project ->
@@ -284,6 +248,7 @@ abstract class Job extends Item {
      * Sets the number of times the SCM checkout is retried on errors.
      *
      * @param times number of attempts
+     * @since 1.16
      */
     void checkoutRetryCount(int times = 3) {
         withXmlActions << WithXmlAction.create { Node project ->
@@ -296,6 +261,7 @@ abstract class Job extends Item {
      * Sets a display name for the project.
      *
      * @param displayName name to display
+     * @since 1.16
      */
     void displayName(String displayName) {
         Preconditions.checkNotNull(displayName, 'Display name must not be null.')
@@ -309,6 +275,7 @@ abstract class Job extends Item {
      * Configures a custom workspace for the project.
      *
      * @param workspacePath workspace path to use
+     * @since 1.16
      */
     void customWorkspace(String workspacePath) {
         Preconditions.checkNotNull(workspacePath, 'Workspace path must not be null')
@@ -320,6 +287,7 @@ abstract class Job extends Item {
 
     /**
      * Configures the job to block when upstream projects are building.
+     * @since 1.16
      */
     void blockOnUpstreamProjects() {
         withXmlActions << WithXmlAction.create { Node project ->
@@ -329,6 +297,7 @@ abstract class Job extends Item {
 
     /**
      * Configures the job to block when downstream projects are building.
+     * @since 1.16
      */
     void blockOnDownstreamProjects() {
         withXmlActions << WithXmlAction.create { Node project ->
@@ -337,9 +306,9 @@ abstract class Job extends Item {
     }
 
     /**
-     * Configures the keep Dependencies Flag which can be set in the Fingerprinting action
+     * Configures the keep Dependencies Flag which can be set in the Fingerprinting action.
      *
-     * <keepDependencies>true</keepDependencies>
+     * @since 1.17
      */
     void keepDependencies(boolean keep = true) {
         withXmlActions << WithXmlAction.create { Node project ->
@@ -349,9 +318,9 @@ abstract class Job extends Item {
     }
 
     /**
-     * Configures the 'Execute concurrent builds if necessary' flag
+     * Configures the 'Execute concurrent builds if necessary' flag.
      *
-     * <concurrentBuild>true</concurrentBuild>
+     * @since 1.21
      */
     void concurrentBuild(boolean allowConcurrentBuild = true) {
         withXmlActions << WithXmlAction.create { Node project ->
@@ -363,20 +332,9 @@ abstract class Job extends Item {
     /**
      * Configures the Notification Plugin.
      *
-     * <properties>
-     *     <com.tikal.hudson.plugins.notification.HudsonNotificationProperty>
-     *         <endpoints>
-     *             <com.tikal.hudson.plugins.notification.Endpoint>
-     *                 <protocol>HTTP</protocol>
-     *                 <format>JSON</format>
-     *                 <url />
-     *                 <event>all</event>
-     *                 <timeout>30000</timeout>
-     *             </com.tikal.hudson.plugins.notification.Endpoint>
-     *         </endpoints>
-     *     </com.tikal.hudson.plugins.notification.HudsonNotificationProperty>
-     * </properties>
+     * @since 1.26
      */
+    @RequiresPlugin(id = 'notification')
     void notifications(@DslContext(NotificationContext) Closure notificationClosure) {
         NotificationContext notificationContext = new NotificationContext(jobManagement)
         ContextHelper.executeInContext(notificationClosure, notificationContext)
@@ -389,17 +347,9 @@ abstract class Job extends Item {
     }
 
     /**
-     * <properties>
-     *     <hudson.plugins.batch__task.BatchTaskProperty>
-     *         <tasks>
-     *             <hudson.plugins.batch__task.BatchTask>
-     *                 <name>Hello World</name>
-     *                 <script>echo Hello World</script>
-     *             </hudson.plugins.batch__task.BatchTask>
-     *         </tasks>
-     *     </hudson.plugins.batch__task.BatchTaskProperty>
-     * </properties>
+     * @since 1.24
      */
+    @RequiresPlugin(id = 'batch-task')
     void batchTask(String name, String script) {
         withXmlActions << WithXmlAction.create { Node project ->
             Node batchTaskProperty = project / 'properties' / 'hudson.plugins.batch__task.BatchTaskProperty'
@@ -411,13 +361,9 @@ abstract class Job extends Item {
     }
 
     /**
-     * <properties>
-     *     <se.diabol.jenkins.pipeline.PipelineProperty>
-     *         <taskName>integration-tests</taskName>
-     *         <stageName>qa</stageName>
-     *     </se.diabol.jenkins.pipeline.PipelineProperty>
-     * </properties>
+     * @since 1.26
      */
+    @RequiresPlugin(id = 'delivery-pipeline-plugin')
     void deliveryPipelineConfiguration(String stageName, String taskName = null) {
         if (stageName || taskName) {
             withXmlActions << WithXmlAction.create { Node project ->
@@ -433,8 +379,9 @@ abstract class Job extends Item {
         }
     }
 
-    void authorization(@DslContext(AuthorizationContext) Closure closure) {
-        AuthorizationContext context = new AuthorizationContext()
+    @RequiresPlugin(id = 'matrix-auth')
+    void authorization(@DslContext(JobAuthorizationContext) Closure closure) {
+        JobAuthorizationContext context = new JobAuthorizationContext(jobManagement)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
@@ -445,35 +392,11 @@ abstract class Job extends Item {
         }
     }
 
-    @Deprecated
-    void permission(String permission) {
-        jobManagement.logDeprecationWarning()
-
-        authorization {
-            delegate.permission(permission)
-        }
-    }
-
-    @Deprecated
-    void permission(Permissions permission, String user) {
-        jobManagement.logDeprecationWarning()
-
-        authorization {
-            delegate.permission(permission, user)
-        }
-    }
-
-    @Deprecated
-    void permission(String permissionEnumName, String user) {
-        jobManagement.logDeprecationWarning()
-
-        authorization {
-            delegate.permission(permissionEnumName, user)
-        }
-    }
-
+    /**
+     * @since 1.15
+     */
     void parameters(@DslContext(BuildParametersContext) Closure closure) {
-        BuildParametersContext context = new BuildParametersContext()
+        BuildParametersContext context = new BuildParametersContext(jobManagement)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
@@ -485,23 +408,28 @@ abstract class Job extends Item {
     }
 
     void scm(@DslContext(ScmContext) Closure closure) {
-        ScmContext context = new ScmContext(false, withXmlActions, jobManagement)
+        ScmContext context = new ScmContext(withXmlActions, jobManagement, this)
         ContextHelper.executeInContext(closure, context)
 
-        withXmlActions << WithXmlAction.create { Node project ->
-            Node scm = project / scm
-            if (scm) {
-                // There can only be only one SCM, so remove if there
-                project.remove(scm)
-            }
+        if (!context.scmNodes.empty) {
+            Preconditions.checkState(context.scmNodes.size() == 1, 'Outside "multiscm", only one SCM can be specified')
 
-            // Assuming append the only child
-            project << context.scmNode
+            withXmlActions << WithXmlAction.create { Node project ->
+                Node scm = project / scm
+                if (scm) {
+                    // There can only be only one SCM, so remove if there
+                    project.remove(scm)
+                }
+
+                // Assuming append the only child
+                project << context.scmNodes[0]
+            }
         }
     }
 
+    @RequiresPlugin(id = 'multiple-scms')
     void multiscm(@DslContext(ScmContext) Closure closure) {
-        ScmContext context = new ScmContext(true, withXmlActions, jobManagement)
+        ScmContext context = new ScmContext(withXmlActions, jobManagement, this)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
@@ -523,7 +451,7 @@ abstract class Job extends Item {
     }
 
     void triggers(@DslContext(TriggerContext) Closure closure) {
-        TriggerContext context = new TriggerContext(jobManagement)
+        TriggerContext context = new TriggerContext(jobManagement, this)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
@@ -533,8 +461,11 @@ abstract class Job extends Item {
         }
     }
 
+    /**
+     * @since 1.19
+     */
     void wrappers(@DslContext(WrapperContext) Closure closure) {
-        WrapperContext context = new WrapperContext(jobManagement)
+        WrapperContext context = new WrapperContext(jobManagement, this)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
@@ -544,8 +475,19 @@ abstract class Job extends Item {
         }
     }
 
+    void properties(@DslContext(PropertiesContext) Closure closure) {
+        PropertiesContext context = new PropertiesContext(jobManagement, this)
+        ContextHelper.executeInContext(closure, context)
+
+        withXmlActions << WithXmlAction.create { Node project ->
+            context.propertiesNodes.each {
+                project / 'properties' << it
+            }
+        }
+    }
+
     void steps(@DslContext(StepContext) Closure closure) {
-        StepContext context = new StepContext(jobManagement)
+        StepContext context = new StepContext(jobManagement, this)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
@@ -556,23 +498,12 @@ abstract class Job extends Item {
     }
 
     void publishers(@DslContext(PublisherContext) Closure closure) {
-        PublisherContext context = new PublisherContext(jobManagement)
+        PublisherContext context = new PublisherContext(jobManagement, this)
         ContextHelper.executeInContext(closure, context)
 
         withXmlActions << WithXmlAction.create { Node project ->
             context.publisherNodes.each {
                 project / 'publishers' << it
-            }
-        }
-    }
-
-    void providedSettings(String settingsName) {
-        String settingsId = jobManagement.getConfigFileId(ConfigFileType.MavenSettings, settingsName)
-        Preconditions.checkNotNull(settingsId, "Managed Maven settings with name '${settingsName}' not found")
-
-        withXmlActions << WithXmlAction.create { Node project ->
-            project / settings(class: 'org.jenkinsci.plugins.configfiles.maven.job.MvnSettingsProvider') {
-                settingsConfigId(settingsId)
             }
         }
     }

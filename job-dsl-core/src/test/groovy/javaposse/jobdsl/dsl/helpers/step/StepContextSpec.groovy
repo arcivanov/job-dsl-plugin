@@ -2,7 +2,9 @@ package javaposse.jobdsl.dsl.helpers.step
 
 import hudson.util.VersionNumber
 import javaposse.jobdsl.dsl.ConfigFileType
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -11,7 +13,8 @@ import static javaposse.jobdsl.dsl.helpers.step.condition.FileExistsCondition.Ba
 
 class StepContextSpec extends Specification {
     JobManagement jobManagement = Mock(JobManagement)
-    StepContext context = new StepContext(jobManagement)
+    Item item = Mock(Item)
+    StepContext context = new StepContext(jobManagement, item)
 
     def 'call shell method'() {
         when:
@@ -37,6 +40,47 @@ class StepContextSpec extends Specification {
         shellStep.command[0].value() == 'echo "Hello from Windows"'
     }
 
+    def 'call powerShell method'() {
+        when:
+        context.powerShell('New-Item c:\\testBuilds')
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'hudson.plugins.powershell.PowerShell'
+            children().size() == 1
+            command[0].value() == 'New-Item c:\\testBuilds'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('powershell', '1.2')
+    }
+
+    def 'call buildDescription method with all options'() {
+        when:
+        context.buildDescription('[version] (.*)', 'foo \\1')
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'hudson.plugins.descriptionsetter.DescriptionSetterBuilder'
+            children().size() == 2
+            regexp[0].value() == '[version] (.*)'
+            description[0].value() == 'foo \\1'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('description-setter', '1.9')
+    }
+
+    def 'call buildDescription method with minimum options'() {
+        when:
+        context.buildDescription('[version] (.*)')
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'hudson.plugins.descriptionsetter.DescriptionSetterBuilder'
+            children().size() == 2
+            regexp[0].value() == '[version] (.*)'
+            description[0].value() == ''
+        }
+        1 * jobManagement.requireMinimumPluginVersion('description-setter', '1.9')
+    }
+
     def 'call gradle methods'() {
         when:
         context.gradle('build')
@@ -48,6 +92,7 @@ class StepContextSpec extends Specification {
         gradleStep.name() == 'hudson.plugins.gradle.Gradle'
         gradleStep.tasks[0].value() == 'build'
         gradleStep.useWrapper[0].value() == true
+        1 * jobManagement.requirePlugin('gradle')
 
         when:
         context.gradle('build', '-I init.gradle', false)
@@ -57,6 +102,7 @@ class StepContextSpec extends Specification {
         def gradleStep2 = context.stepNodes[1]
         gradleStep2.switches[0].value() == '-I init.gradle'
         gradleStep2.useWrapper[0].value() == false
+        1 * jobManagement.requirePlugin('gradle')
 
         when:
         context.gradle('build', '-I init.gradle', false) {
@@ -67,6 +113,7 @@ class StepContextSpec extends Specification {
         context.stepNodes.size() == 3
         def gradleStep3 = context.stepNodes[2]
         gradleStep3.node1[0].value() == 'value1'
+        1 * jobManagement.requirePlugin('gradle')
     }
 
     def 'call gradle methods with defaults'() {
@@ -86,6 +133,7 @@ class StepContextSpec extends Specification {
             fromRootBuildScriptDir[0].value() == true
             makeExecutable[0].value() == false
         }
+        1 * jobManagement.requirePlugin('gradle')
 
         when:
         context.gradle {
@@ -104,6 +152,7 @@ class StepContextSpec extends Specification {
             fromRootBuildScriptDir[0].value() == true
             makeExecutable[0].value() == false
         }
+        1 * jobManagement.requirePlugin('gradle')
     }
 
     def 'call gradle methods with context'() {
@@ -135,6 +184,7 @@ class StepContextSpec extends Specification {
             fromRootBuildScriptDir[0].value() == true
             makeExecutable[0].value() == true
         }
+        1 * jobManagement.requirePlugin('gradle')
     }
 
     def 'call grails methods'() {
@@ -147,14 +197,15 @@ class StepContextSpec extends Specification {
         def grailsStep0 = context.stepNodes[0]
         grailsStep0.name() == 'com.g2one.hudson.grails.GrailsBuilder'
         grailsStep0.targets[0].value() == 'compile'
-        grailsStep0.useWrapper[0].value() == 'false'
+        grailsStep0.useWrapper[0].value() == false
         grailsStep0.grailsWorkDir[0].value() == ''
         grailsStep0.projectWorkDir[0].value() == ''
         grailsStep0.projectBaseDir[0].value() == ''
         grailsStep0.serverPort[0].value() == ''
         grailsStep0.'properties'[0].value() == ''
-        grailsStep0.forceUpgrade[0].value() == 'false'
-        grailsStep0.nonInteractive[0].value() == 'true'
+        grailsStep0.forceUpgrade[0].value() == false
+        grailsStep0.nonInteractive[0].value() == true
+        1 * jobManagement.requirePlugin('grails')
 
         when:
         context.grails('compile', true)
@@ -164,14 +215,15 @@ class StepContextSpec extends Specification {
         def grailsStep1 = context.stepNodes[1]
         grailsStep1.name() == 'com.g2one.hudson.grails.GrailsBuilder'
         grailsStep1.targets[0].value() == 'compile'
-        grailsStep1.useWrapper[0].value() == 'true'
+        grailsStep1.useWrapper[0].value() == true
         grailsStep1.grailsWorkDir[0].value() == ''
         grailsStep1.projectWorkDir[0].value() == ''
         grailsStep1.projectBaseDir[0].value() == ''
         grailsStep1.serverPort[0].value() == ''
         grailsStep1.'properties'[0].value() == ''
-        grailsStep1.forceUpgrade[0].value() == 'false'
-        grailsStep1.nonInteractive[0].value() == 'true'
+        grailsStep1.forceUpgrade[0].value() == false
+        grailsStep1.nonInteractive[0].value() == true
+        1 * jobManagement.requirePlugin('grails')
 
         when:
         context.grails('compile', false) {
@@ -184,14 +236,15 @@ class StepContextSpec extends Specification {
         def grailsStep2 = context.stepNodes[2]
         grailsStep2.name() == 'com.g2one.hudson.grails.GrailsBuilder'
         grailsStep2.targets[0].value() == 'compile'
-        grailsStep2.useWrapper[0].value() == 'false'
+        grailsStep2.useWrapper[0].value() == false
         grailsStep2.grailsWorkDir[0].value() == 'work1'
         grailsStep2.projectWorkDir[0].value() == ''
         grailsStep2.projectBaseDir[0].value() == ''
         grailsStep2.serverPort[0].value() == ''
         grailsStep2.'properties'[0].value() == ''
-        grailsStep2.forceUpgrade[0].value() == 'false'
-        grailsStep2.nonInteractive[0].value() == 'false'
+        grailsStep2.forceUpgrade[0].value() == false
+        grailsStep2.nonInteractive[0].value() == false
+        1 * jobManagement.requirePlugin('grails')
 
         when:
         context.grails {
@@ -213,14 +266,15 @@ class StepContextSpec extends Specification {
         def grailsStep3 = context.stepNodes[3]
         grailsStep3.name() == 'com.g2one.hudson.grails.GrailsBuilder'
         grailsStep3.targets[0].value() == 'clean compile test-app'
-        grailsStep3.useWrapper[0].value() == 'true'
+        grailsStep3.useWrapper[0].value() == true
         grailsStep3.grailsWorkDir[0].value() == 'work'
         grailsStep3.projectWorkDir[0].value() == 'project'
         grailsStep3.projectBaseDir[0].value() == 'base'
         grailsStep3.serverPort[0].value() == '1111'
         grailsStep3.'properties'[0].value() == 'prop1=val1\nprop2=val2\nprop3=val3'
-        grailsStep3.forceUpgrade[0].value() == 'true'
-        grailsStep3.nonInteractive[0].value() == 'false'
+        grailsStep3.forceUpgrade[0].value() == true
+        grailsStep3.nonInteractive[0].value() == false
+        1 * jobManagement.requirePlugin('grails')
 
         when:
         context.grails '"test-app --stacktrace"', {
@@ -238,14 +292,15 @@ class StepContextSpec extends Specification {
         def grailsStep4 = context.stepNodes[4]
         grailsStep4.name() == 'com.g2one.hudson.grails.GrailsBuilder'
         grailsStep4.targets[0].value() == '"test-app --stacktrace"'
-        grailsStep4.useWrapper[0].value() == 'true'
+        grailsStep4.useWrapper[0].value() == true
         grailsStep4.grailsWorkDir[0].value() == 'work'
         grailsStep4.projectWorkDir[0].value() == 'project'
         grailsStep4.projectBaseDir[0].value() == 'base'
         grailsStep4.serverPort[0].value() == '8080'
         grailsStep4.'properties'[0].value() == ''
-        grailsStep4.forceUpgrade[0].value() == 'true'
-        grailsStep4.nonInteractive[0].value() == 'false'
+        grailsStep4.forceUpgrade[0].value() == true
+        grailsStep4.nonInteractive[0].value() == false
+        1 * jobManagement.requirePlugin('grails')
 
         when:
         context.grails {
@@ -256,14 +311,15 @@ class StepContextSpec extends Specification {
         def grailsStep5 = context.stepNodes[5]
         grailsStep5.name() == 'com.g2one.hudson.grails.GrailsBuilder'
         grailsStep5.targets[0].value() == ''
-        grailsStep5.useWrapper[0].value() == 'false'
+        grailsStep5.useWrapper[0].value() == false
         grailsStep5.grailsWorkDir[0].value() == ''
         grailsStep5.projectWorkDir[0].value() == ''
         grailsStep5.projectBaseDir[0].value() == ''
         grailsStep5.serverPort[0].value() == ''
         grailsStep5.'properties'[0].value() == ''
-        grailsStep5.forceUpgrade[0].value() == 'false'
-        grailsStep5.nonInteractive[0].value() == 'true'
+        grailsStep5.forceUpgrade[0].value() == false
+        grailsStep5.nonInteractive[0].value() == true
+        1 * jobManagement.requirePlugin('grails')
     }
 
     def 'call maven methods'() {
@@ -277,6 +333,7 @@ class StepContextSpec extends Specification {
         mavenStep.name() == 'hudson.tasks.Maven'
         mavenStep.targets[0].value() == 'install'
         mavenStep.pom[0] == null
+        1 * jobManagement.requirePlugin('maven-plugin')
 
         when:
         context.maven('install', 'pom.xml') { mavenNode ->
@@ -289,6 +346,7 @@ class StepContextSpec extends Specification {
         def mavenStep2 = context.stepNodes[1]
         mavenStep2.pom[0].value() == 'pom.xml'
         mavenStep2.mavenName[0].value() == 'Maven 2.0.1'
+        1 * jobManagement.requirePlugin('maven-plugin')
     }
 
     def 'call maven method with full context'() {
@@ -299,7 +357,7 @@ class StepContextSpec extends Specification {
             goals('install')
             mavenOpts('-Xms256m')
             mavenOpts('-Xmx512m')
-            localRepository(LocalToWorkspace)
+            localRepository(LocalRepositoryLocation.LOCAL_TO_WORKSPACE)
             mavenInstallation('Maven 3.0.5')
             properties skipTests: true, other: 'some'
             property 'evenAnother', 'One'
@@ -317,10 +375,11 @@ class StepContextSpec extends Specification {
         mavenStep.targets[0].value() == 'clean install'
         mavenStep.pom[0].value() == 'module-a/pom.xml'
         mavenStep.jvmOptions[0].value() == '-Xms256m -Xmx512m'
-        mavenStep.usePrivateRepository[0].value() == 'true'
+        mavenStep.usePrivateRepository[0].value() == true
         mavenStep.mavenName[0].value() == 'Maven 3.0.5'
         mavenStep.settingsConfigId[0].value() == 'foo-bar'
         mavenStep.properties[0].value() == 'skipTests=true\nother=some\nevenAnother=One'
+        1 * jobManagement.requirePlugin('maven-plugin')
     }
 
     def 'call maven method with minimal context'() {
@@ -336,8 +395,24 @@ class StepContextSpec extends Specification {
         mavenStep.children().size() == 4
         mavenStep.targets[0].value() == ''
         mavenStep.jvmOptions[0].value() == ''
-        mavenStep.usePrivateRepository[0].value() == 'false'
+        mavenStep.usePrivateRepository[0].value() == false
         mavenStep.mavenName[0].value() == '(Default)'
+        1 * jobManagement.requirePlugin('maven-plugin')
+    }
+
+    def 'call maven method with deprecated options'() {
+        when:
+        context.maven {
+            localRepository(LocalToWorkspace)
+        }
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'hudson.tasks.Maven'
+            children().size() == 4
+            usePrivateRepository[0].value() == true
+        }
+        1 * jobManagement.requirePlugin('maven-plugin')
     }
 
     def 'call maven method with unknown provided settings'() {
@@ -373,12 +448,13 @@ class StepContextSpec extends Specification {
             children().size() == 5
             targets[0].value() == ''
             jvmOptions[0].value() == ''
-            usePrivateRepository[0].value() == 'false'
+            usePrivateRepository[0].value() == false
             mavenName[0].value() == '(Default)'
             settings[0].attribute('class') == 'org.jenkinsci.plugins.configfiles.maven.job.MvnSettingsProvider'
             settings[0].children().size() == 1
             settings[0].settingsConfigId[0].value() == settingsId
         }
+        1 * jobManagement.requirePlugin('maven-plugin')
     }
 
     def 'call ant methods'() {
@@ -393,6 +469,7 @@ class StepContextSpec extends Specification {
         antEmptyNode.antName[0].value() == '(Default)'
         !antEmptyNode.children().any { it.name() == 'antOpts' }
         !antEmptyNode.children().any { it.name() == 'properties' }
+        1 * jobManagement.requirePlugin('ant')
 
         when:
         context.ant('build')
@@ -401,6 +478,7 @@ class StepContextSpec extends Specification {
         context.stepNodes.size() == 2
         def antBuildNode = context.stepNodes[1]
         antBuildNode.targets[0].value() == 'build'
+        1 * jobManagement.requirePlugin('ant')
 
         when:
         context.ant('build', 'dir1/build.xml', 'Ant 1.8')
@@ -410,6 +488,7 @@ class StepContextSpec extends Specification {
         def antArgs = context.stepNodes[2]
         antArgs.buildFile[0].value() == 'dir1/build.xml'
         antArgs.antName[0].value() == 'Ant 1.8'
+        1 * jobManagement.requirePlugin('ant')
 
         when:
         context.ant('build') {
@@ -435,6 +514,7 @@ class StepContextSpec extends Specification {
         antClosure.targets[0].value() == 'build test integTest publish deploy'
         antClosure.antOpts[0].value() == '-Xmx1g\n-Dprop2=value2\n-Dprop3=value3'
         antClosure.'properties'[0].value() == 'test.size=4\nlogging=info\ntest.threads=10\ninput.status=release'
+        1 * jobManagement.requirePlugin('ant')
     }
 
     def 'call groovyCommand methods'() {
@@ -462,6 +542,7 @@ class StepContextSpec extends Specification {
         scriptSourceNode.attribute('class') == 'hudson.plugins.groovy.StringScriptSource'
         scriptSourceNode.command.size() == 1
         scriptSourceNode.command[0].value() == "println 'Hello World!'"
+        1 * jobManagement.requirePlugin('groovy')
 
         when:
         context.groovyCommand('acme.Acme.doSomething()', 'Groovy 2.0') {
@@ -484,11 +565,11 @@ class StepContextSpec extends Specification {
         acmeGroovyNode.groovyName.size() == 1
         acmeGroovyNode.groovyName[0].value() == 'Groovy 2.0'
         acmeGroovyNode.parameters.size() == 1
-        acmeGroovyNode.parameters[0].value() == 'foo\nbar\nbaz'
+        acmeGroovyNode.parameters[0].value() == 'foo bar baz'
         acmeGroovyNode.classPath.size() == 1
         acmeGroovyNode.classPath[0].value() == "/foo/acme.jar${File.pathSeparator}/foo/test.jar"
         acmeGroovyNode.scriptParameters.size() == 1
-        acmeGroovyNode.scriptParameters[0].value() == 'alfa\nbravo\ncharlie'
+        acmeGroovyNode.scriptParameters[0].value() == 'alfa bravo charlie'
         acmeGroovyNode.properties.size() == 1
         acmeGroovyNode.properties[0].value() == 'one=two\nthree=four\nfive=six'
         acmeGroovyNode.javaOpts.size() == 1
@@ -498,6 +579,7 @@ class StepContextSpec extends Specification {
         acmeScriptSourceNode.attribute('class') == 'hudson.plugins.groovy.StringScriptSource'
         acmeScriptSourceNode.command.size() == 1
         acmeScriptSourceNode.command[0].value() == 'acme.Acme.doSomething()'
+        1 * jobManagement.requirePlugin('groovy')
     }
 
     def 'call groovyScriptFile methods'() {
@@ -525,6 +607,7 @@ class StepContextSpec extends Specification {
         scriptSourceNode.attribute('class') == 'hudson.plugins.groovy.FileScriptSource'
         scriptSourceNode.scriptFile.size() == 1
         scriptSourceNode.scriptFile[0].value() == 'scripts/hello.groovy'
+        1 * jobManagement.requirePlugin('groovy')
 
         when:
         context.groovyScriptFile('acme.groovy', 'Groovy 2.0') {
@@ -547,11 +630,11 @@ class StepContextSpec extends Specification {
         acmeGroovyNode.groovyName.size() == 1
         acmeGroovyNode.groovyName[0].value() == 'Groovy 2.0'
         acmeGroovyNode.parameters.size() == 1
-        acmeGroovyNode.parameters[0].value() == 'foo\nbar\nbaz'
+        acmeGroovyNode.parameters[0].value() == 'foo bar baz'
         acmeGroovyNode.classPath.size() == 1
         acmeGroovyNode.classPath[0].value() == "/foo/acme.jar${File.pathSeparator}/foo/test.jar"
         acmeGroovyNode.scriptParameters.size() == 1
-        acmeGroovyNode.scriptParameters[0].value() == 'alfa\nbravo\ncharlie'
+        acmeGroovyNode.scriptParameters[0].value() == 'alfa bravo charlie'
         acmeGroovyNode.properties.size() == 1
         acmeGroovyNode.properties[0].value() == 'one=two\nthree=four\nfive=six'
         acmeGroovyNode.javaOpts.size() == 1
@@ -561,6 +644,7 @@ class StepContextSpec extends Specification {
         acmeScriptSourceNode.attribute('class') == 'hudson.plugins.groovy.FileScriptSource'
         acmeScriptSourceNode.scriptFile.size() == 1
         acmeScriptSourceNode.scriptFile[0].value() == 'acme.groovy'
+        1 * jobManagement.requirePlugin('groovy')
 
         when:
         context.groovyScriptFile('foo.groovy') {
@@ -572,6 +656,7 @@ class StepContextSpec extends Specification {
         def groovy21Node = context.stepNodes[2]
         groovy21Node.groovyName.size() == 1
         groovy21Node.groovyName[0].value() == 'Groovy 2.1'
+        1 * jobManagement.requirePlugin('groovy')
     }
 
     def 'call systemGroovyCommand methods'() {
@@ -591,6 +676,7 @@ class StepContextSpec extends Specification {
         scriptSourceNode.attribute('class') == 'hudson.plugins.groovy.StringScriptSource'
         scriptSourceNode.command.size() == 1
         scriptSourceNode.command[0].value() == "println 'Hello World!'"
+        1 * jobManagement.requirePlugin('groovy')
 
         when:
         context.systemGroovyCommand('acme.Acme.doSomething()') {
@@ -613,6 +699,7 @@ class StepContextSpec extends Specification {
         acmeScriptSourceNode.attribute('class') == 'hudson.plugins.groovy.StringScriptSource'
         acmeScriptSourceNode.command.size() == 1
         acmeScriptSourceNode.command[0].value() == 'acme.Acme.doSomething()'
+        1 * jobManagement.requirePlugin('groovy')
     }
 
     def 'call systemGroovyScriptFile methods'() {
@@ -632,6 +719,7 @@ class StepContextSpec extends Specification {
         scriptSourceNode.attribute('class') == 'hudson.plugins.groovy.FileScriptSource'
         scriptSourceNode.scriptFile.size() == 1
         scriptSourceNode.scriptFile[0].value() == 'scripts/hello.groovy'
+        1 * jobManagement.requirePlugin('groovy')
 
         when:
         context.systemGroovyScriptFile('acme.groovy') {
@@ -654,16 +742,18 @@ class StepContextSpec extends Specification {
         acmeScriptSourceNode.attribute('class') == 'hudson.plugins.groovy.FileScriptSource'
         acmeScriptSourceNode.scriptFile.size() == 1
         acmeScriptSourceNode.scriptFile[0].value() == 'acme.groovy'
+        1 * jobManagement.requirePlugin('groovy')
     }
 
-    def 'call minimal copyArtifacts'() {
-        when: 'Least arguments'
+    def 'call minimal deprecated copyArtifacts'() {
+        when:
         context.copyArtifacts('upstream', '**/*.xml') {
             upstreamBuild()
         }
 
         then:
         1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.26')
+        1 * jobManagement.logDeprecationWarning()
         context.stepNodes.size() == 1
         def copyEmptyNode = context.stepNodes[0]
         copyEmptyNode.name() == 'hudson.plugins.copyartifact.CopyArtifact'
@@ -677,7 +767,7 @@ class StepContextSpec extends Specification {
         selectorNode.children().size() == 0
     }
 
-    def 'call copyArtifacts all args'() {
+    def 'call deprecated copyArtifacts all args'() {
         when:
         context.copyArtifacts('upstream', '**/*.xml', 'target/', true, true) {
             upstreamBuild(true)
@@ -685,18 +775,19 @@ class StepContextSpec extends Specification {
 
         then:
         1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.26')
+        1 * jobManagement.logDeprecationWarning()
         context.stepNodes.size() == 1
         def copyEmptyNode = context.stepNodes[0]
         copyEmptyNode.name() == 'hudson.plugins.copyartifact.CopyArtifact'
-        copyEmptyNode.flatten[0].value() == 'true'
-        copyEmptyNode.optional[0].value() == 'true'
+        copyEmptyNode.flatten[0].value() == true
+        copyEmptyNode.optional[0].value() == true
         copyEmptyNode.target[0].value() == 'target/'
         Node selectorNode = copyEmptyNode.selector[0]
         selectorNode.attribute('class') == 'hudson.plugins.copyartifact.TriggeredBuildSelector'
-        selectorNode.fallbackToLastSuccessful[0].value() == 'true'
+        selectorNode.fallbackToLastSuccessful[0].value() == true
     }
 
-    def 'call copyArtifacts selector variants'() {
+    def 'call deprecated copyArtifacts selector variants'() {
         when:
         context.copyArtifacts('upstream', '**/*.xml') {
             latestSuccessful()
@@ -776,8 +867,103 @@ class StepContextSpec extends Specification {
         Node selectorNode8 = context.stepNodes[7].selector[0]
         selectorNode8.attribute('class') == 'hudson.plugins.copyartifact.StatusBuildSelector'
         selectorNode8.children().size() == 1
-        selectorNode8.stable[0].value() == 'true'
+        selectorNode8.stable[0].value() == true
+    }
 
+    def 'call minimal copyArtifacts'() {
+        setup:
+        jobManagement.getPluginVersion('copyartifact') >> new VersionNumber('1.26')
+
+        when:
+        context.copyArtifacts('upstream')
+
+        then:
+        1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.26')
+        with(context.stepNodes[0]) {
+            name() == 'hudson.plugins.copyartifact.CopyArtifact'
+            children().size() == 4
+            project[0].value() == 'upstream'
+            filter[0].value() == ''
+            target[0].value() == ''
+            with(selector[0]) {
+                attribute('class') == 'hudson.plugins.copyartifact.StatusBuildSelector'
+                children().size() == 0
+            }
+        }
+    }
+
+    def 'call copyArtifacts all options'() {
+        setup:
+        jobManagement.getPluginVersion('copyartifact') >> new VersionNumber('1.29')
+
+        when:
+        context.copyArtifacts('upstream') {
+            includePatterns('*.xml', '*.txt')
+            excludePatterns('foo.xml', 'foo.txt')
+            targetDirectory('target/')
+            flatten()
+            optional()
+            fingerprintArtifacts(false)
+            buildSelector {
+                upstreamBuild(true)
+            }
+        }
+
+        then:
+        1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.26')
+        1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.29')
+        1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.31')
+        with(context.stepNodes[0]) {
+            name() == 'hudson.plugins.copyartifact.CopyArtifact'
+            children().size() == 8
+            project[0].value() == 'upstream'
+            filter[0].value() == '*.xml, *.txt'
+            excludes[0].value() == 'foo.xml, foo.txt'
+            flatten[0].value() == true
+            optional[0].value() == true
+            target[0].value() == 'target/'
+            doNotFingerprintArtifacts[0].value() == true
+            with(selector[0]) {
+                attribute('class') == 'hudson.plugins.copyartifact.TriggeredBuildSelector'
+                fallbackToLastSuccessful[0].value() == true
+            }
+        }
+    }
+
+    def 'call copyArtifacts all options no fingerprint'() {
+        setup:
+        jobManagement.getPluginVersion('copyartifact') >> new VersionNumber('1.31')
+
+        when:
+        context.copyArtifacts('upstream') {
+            includePatterns('*.xml', '*.txt')
+            excludePatterns('foo.xml', 'foo.txt')
+            targetDirectory('target/')
+            flatten()
+            optional()
+            buildSelector {
+                upstreamBuild(true)
+            }
+        }
+
+        then:
+        1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.26')
+        1 * jobManagement.requireMinimumPluginVersion('copyartifact', '1.31')
+        with(context.stepNodes[0]) {
+            name() == 'hudson.plugins.copyartifact.CopyArtifact'
+            children().size() == 8
+            project[0].value() == 'upstream'
+            filter[0].value() == '*.xml, *.txt'
+            excludes[0].value() == 'foo.xml, foo.txt'
+            flatten[0].value() == true
+            optional[0].value() == true
+            target[0].value() == 'target/'
+            doNotFingerprintArtifacts[0].value() == false
+            with(selector[0]) {
+                attribute('class') == 'hudson.plugins.copyartifact.TriggeredBuildSelector'
+                fallbackToLastSuccessful[0].value() == true
+            }
+        }
     }
 
     def 'call resolveArtifacts with minimal arguments'() {
@@ -798,6 +984,7 @@ class StepContextSpec extends Specification {
             releaseChecksumPolicy[0].value() == 'warn'
             artifacts[0].children().size() == 0
         }
+        1 * jobManagement.requirePlugin('repository-connector')
     }
 
     def 'call resolveArtifacts with all arguments and two artifacts' () {
@@ -856,213 +1043,7 @@ class StepContextSpec extends Specification {
                 targetFileName[0].value() == 'logback-classic-1.1.1-TEST.jar'
             }
         }
-    }
-
-    def 'call phases with minimal arguments'() {
-        when:
-        context.phase('First')
-
-        then:
-        def phaseNode = context.stepNodes[0]
-        phaseNode.name() == 'com.tikal.jenkins.plugins.multijob.MultiJobBuilder'
-        phaseNode.phaseName[0].value() == 'First'
-        phaseNode.continuationCondition[0].value() == 'SUCCESSFUL'
-
-        when:
-        context.phase {
-            phaseName 'Second'
-            job('JobA')
-        }
-
-        then:
-        def phaseNode2 = context.stepNodes[1]
-        phaseNode2.phaseName[0].value() == 'Second'
-        def jobNode = phaseNode2.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[0]
-        jobNode.children().size() == 4
-        jobNode.jobName[0].value() == 'JobA'
-        jobNode.currParams[0].value() == true
-        jobNode.exposedSCM[0].value() == true
-        jobNode.configs[0].attribute('class') == 'java.util.Collections$EmptyList'
-    }
-
-    def 'call phases with minimal arguments and plugin version 1.11'() {
-        setup:
-        jobManagement.getPluginVersion('jenkins-multijob-plugin') >> new VersionNumber('1.11')
-
-        when:
-        context.phase {
-            phaseName 'Second'
-            job('JobA')
-        }
-
-        then:
-        def phaseNode = context.stepNodes[0]
-        phaseNode.phaseName[0].value() == 'Second'
-        def jobNode = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[0]
-        jobNode.children().size() == 6
-        jobNode.jobName[0].value() == 'JobA'
-        jobNode.currParams[0].value() == true
-        jobNode.exposedSCM[0].value() == true
-        jobNode.configs[0].attribute('class') == 'java.util.Collections$EmptyList'
-        jobNode.disableJob[0].value() == false
-        jobNode.killPhaseOnJobResultCondition[0].value() == 'FAILURE'
-    }
-
-    def 'call phases with multiple jobs'() {
-        when:
-        context.phase('Third') {
-            job('JobA')
-            job('JobB')
-            job('JobC')
-        }
-
-        then:
-        def phaseNode = context.stepNodes[0]
-        def jobNodeA = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[0]
-        jobNodeA.jobName[0].value() == 'JobA'
-        def jobNodeB = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[1]
-        jobNodeB.jobName[0].value() == 'JobB'
-        def jobNodeC = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[2]
-        jobNodeC.jobName[0].value() == 'JobC'
-    }
-
-    def 'call phases with jobs with complex parameters'() {
-        when:
-        context.phase('Fourth') {
-            job('JobA', false, true) {
-                boolParam('aParam')
-                boolParam('bParam', false)
-                boolParam('cParam', true)
-                fileParam('my.properties')
-                sameNode()
-                matrixParam('it.name=="hello"')
-                subversionRevision()
-                gitRevision()
-                prop('prop1', 'value1')
-                prop('prop2', 'value2')
-                props([
-                        prop3: 'value3',
-                        prop4: 'value4'
-                ])
-                nodeLabel('nodeParam', 'node_label')
-                configure { phaseJobConfig ->
-                    phaseJobConfig / customConfig << 'foobar'
-                }
-            }
-        }
-
-        then:
-        def phaseNode = context.stepNodes[0]
-        def jobNode = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[0]
-        jobNode.currParams[0].value() == false
-        jobNode.exposedSCM[0].value() == true
-
-        def customConfigNode = jobNode.customConfig[0]
-        customConfigNode.value() == 'foobar'
-
-        def configsNode = jobNode.configs[0]
-        def boolParams = configsNode.'hudson.plugins.parameterizedtrigger.BooleanParameters'[0].configs[0]
-        boolParams.children().size() == 3
-        def boolNode = boolParams.'hudson.plugins.parameterizedtrigger.BooleanParameterConfig'[0]
-        boolNode.name[0].value() == 'aParam'
-        boolNode.value[0].value() == false
-        def boolNode1 = boolParams.'hudson.plugins.parameterizedtrigger.BooleanParameterConfig'[1]
-        boolNode1.name[0].value() == 'bParam'
-        boolNode1.value[0].value() == false
-        def boolNode2 = boolParams.'hudson.plugins.parameterizedtrigger.BooleanParameterConfig'[2]
-        boolNode2.name[0].value() == 'cParam'
-        boolNode2.value[0].value() == true
-
-        def fileNode = configsNode.'hudson.plugins.parameterizedtrigger.FileBuildParameters'[0]
-        fileNode.propertiesFile[0].value() == 'my.properties'
-        fileNode.failTriggerOnMissing[0].value() == false
-
-        def nodeNode = configsNode.'hudson.plugins.parameterizedtrigger.NodeParameters'[0]
-        nodeNode != null
-
-        def matrixNode = configsNode.'hudson.plugins.parameterizedtrigger.matrix.MatrixSubsetBuildParameters'[0]
-        matrixNode.filter[0].value() == 'it.name=="hello"'
-
-        def svnNode = configsNode.'hudson.plugins.parameterizedtrigger.SubversionRevisionBuildParameters'[0]
-        svnNode.includeUpstreamParameters[0].value() == false
-
-        def gitNode = configsNode.'hudson.plugins.git.GitRevisionBuildParameters'[0]
-        gitNode.combineQueuedCommits[0].value() == false
-
-        def propNode = configsNode.'hudson.plugins.parameterizedtrigger.PredefinedBuildParameters'[0]
-        def propStr = propNode.'properties'[0].value()
-        propStr.contains('prop1=value1')
-        propStr.contains('prop2=value2')
-        propStr.contains('prop3=value3')
-        propStr.contains('prop4=value4')
-
-        def nodeLabel = configsNode.
-            'org.jvnet.jenkins.plugins.nodelabelparameter.parameterizedtrigger.NodeLabelBuildParameter'[0]
-        nodeLabel.name[0].value() == 'nodeParam'
-        nodeLabel.nodeLabel[0].value() == 'node_label'
-    }
-
-    def 'call phases with multiple calls'() {
-        when:
-        context.phase('Third') {
-            job('JobA') {
-                fileParam('my1.properties')
-                fileParam('my2.properties')
-            }
-        }
-
-        then:
-        thrown(IllegalStateException)
-
-        when:
-        context.phase('Third') {
-            job('JobA') {
-                matrixParam('it.size=2')
-                matrixParam('it.size=3')
-            }
-        }
-
-        then:
-        thrown(IllegalStateException)
-    }
-
-    def 'call phases with plugin version 1.11 options'() {
-        setup:
-        jobManagement.getPluginVersion('jenkins-multijob-plugin') >> new VersionNumber('1.11')
-
-        when:
-        context.phase {
-            phaseName 'Second'
-            job('JobA') {
-                disableJob()
-                killPhaseCondition('UNSTABLE')
-            }
-        }
-
-        then:
-        def phaseNode = context.stepNodes[0]
-        phaseNode.phaseName[0].value() == 'Second'
-        def jobNode = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[0]
-        jobNode.children().size() == 6
-        jobNode.jobName[0].value() == 'JobA'
-        jobNode.currParams[0].value() == true
-        jobNode.exposedSCM[0].value() == true
-        jobNode.configs[0].attribute('class') == 'java.util.Collections$EmptyList'
-        jobNode.disableJob[0].value() == true
-        jobNode.killPhaseOnJobResultCondition[0].value() == 'UNSTABLE'
-    }
-
-    def 'call killPhaseCondition with invalid argument'() {
-        when:
-        context.phase {
-            phaseName 'Second'
-            job('JobA') {
-                killPhaseCondition('UNKNOWN')
-            }
-        }
-
-        then:
-        thrown(IllegalArgumentException)
+        1 * jobManagement.requirePlugin('repository-connector')
     }
 
     def 'call sbt method minimal'() {
@@ -1079,6 +1060,7 @@ class StepContextSpec extends Specification {
         sbtStep.sbtFlags[0].value() == ''
         sbtStep.actions[0].value() == ''
         sbtStep.subdirPath[0].value() == ''
+        1 * jobManagement.requirePlugin('sbt')
     }
 
     def 'call sbt method action only'() {
@@ -1095,7 +1077,9 @@ class StepContextSpec extends Specification {
         sbtStep.sbtFlags[0].value() == ''
         sbtStep.actions[0].value() == 'test'
         sbtStep.subdirPath[0].value() == ''
+        1 * jobManagement.requirePlugin('sbt')
     }
+
     def 'call sbt method full'() {
         when:
         context.sbt(
@@ -1116,136 +1100,160 @@ class StepContextSpec extends Specification {
         sbtStep.sbtFlags[0].value() == '-Dsbt.log.noformat=true'
         sbtStep.actions[0].value() == 'test'
         sbtStep.subdirPath[0].value() == 'subproject'
+        1 * jobManagement.requirePlugin('sbt')
     }
 
-    def 'call dsl method defaults' () {
+    def 'call dsl with defaults'() {
         when:
         context.dsl {
         }
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == ''
-        dslStep.usingScriptText[0].value() == false
-        dslStep.ignoreExisting[0].value() ==  false
-        dslStep.removedJobAction[0].value() == 'IGNORE'
-        dslStep.scriptText[0].value() == ''
-        dslStep.additionalClasspath[0].value() == ''
+        with(context.stepNodes[0]) {
+            name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
+            children().size() == 8
+            targets[0].value() == ''
+            usingScriptText[0].value() == false
+            ignoreExisting[0].value() == false
+            removedJobAction[0].value() == 'IGNORE'
+            removedViewAction[0].value() == 'IGNORE'
+            scriptText[0].value() == ''
+            additionalClasspath[0].value() == ''
+            lookupStrategy[0].value() == 'JENKINS_ROOT'
+        }
     }
 
-    def 'call dsl method external script ignoring existing' () {
+    def 'call dsl with external scripts and all options'() {
         when:
         context.dsl {
-            removeAction 'DISABLE'
-            external 'some-dsl.groovy', 'some-other-dsl.groovy'
-            external 'still-another-dsl.groovy'
+            external('some-dsl.groovy', 'some-other-dsl.groovy')
+            external('still-another-dsl.groovy')
             ignoreExisting()
+            removeAction('DISABLE')
+            removeViewAction('DELETE')
+            additionalClasspath('some/path')
+            lookupStrategy('SEED_JOB')
         }
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == '''some-dsl.groovy
-some-other-dsl.groovy
-still-another-dsl.groovy'''
-        dslStep.usingScriptText[0].value() == false
-        dslStep.ignoreExisting[0].value() ==  true
-        dslStep.removedJobAction[0].value() == 'DISABLE'
-        dslStep.scriptText[0].value() == ''
+        with(context.stepNodes[0]) {
+            name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
+            children().size() == 8
+            targets[0].value() == 'some-dsl.groovy\nsome-other-dsl.groovy\nstill-another-dsl.groovy'
+            usingScriptText[0].value() == false
+            ignoreExisting[0].value() == true
+            removedJobAction[0].value() == 'DISABLE'
+            removedViewAction[0].value() == 'DELETE'
+            scriptText[0].value() == ''
+            additionalClasspath[0].value() == 'some/path'
+            lookupStrategy[0].value() == 'SEED_JOB'
+        }
     }
 
-    def 'call dsl method external script' () {
+    def 'call dsl with invalid lookup strategy'() {
         when:
         context.dsl {
-            removeAction 'DISABLE'
-            external 'some-dsl.groovy', 'some-other-dsl.groovy'
-            external 'still-another-dsl.groovy'
+            lookupStrategy('XXX')
         }
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == '''some-dsl.groovy
-some-other-dsl.groovy
-still-another-dsl.groovy'''
-        dslStep.usingScriptText[0].value() == false
-        dslStep.ignoreExisting[0].value() ==  false
-        dslStep.removedJobAction[0].value() == 'DISABLE'
-        dslStep.scriptText[0].value() == ''
+        thrown(IllegalArgumentException)
     }
 
-    def 'call dsl method with script text' () {
+    def 'call dsl with invalid remove action'() {
         when:
         context.dsl {
+            removeAction('XXX')
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call dsl with invalid remove view action'() {
+        when:
+        context.dsl {
+            removeViewAction('XXX')
+        }
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'call dsl with script text and all options'() {
+        when:
+        context.dsl {
+            text('''job {
+  foo()
+  bar {
+    baz()
+  }
+}
+''')
+            ignoreExisting()
             removeAction('DELETE')
-            text '''job {
-  foo()
-  bar {
-    baz()
-  }
-}
-'''
+            removeViewAction('DELETE')
+            additionalClasspath('some/path')
+            lookupStrategy('SEED_JOB')
         }
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == ''
-        dslStep.usingScriptText[0].value() == true
-        dslStep.ignoreExisting[0].value() ==  false
-        dslStep.removedJobAction[0].value() == 'DELETE'
-        dslStep.scriptText[0].value() == '''job {
+        with(context.stepNodes[0]) {
+            name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
+            children().size() == 8
+            targets[0].value() == ''
+            usingScriptText[0].value() == true
+            ignoreExisting[0].value() == true
+            removedJobAction[0].value() == 'DELETE'
+            removedViewAction[0].value() == 'DELETE'
+            scriptText[0].value() == '''job {
   foo()
   bar {
     baz()
   }
 }
 '''
+            additionalClasspath[0].value() == 'some/path'
+            lookupStrategy[0].value() == 'SEED_JOB'
+        }
     }
 
-    def 'call dsl method external script as parameters' () {
+    def 'call dsl method external script as parameters'() {
         when:
         context.dsl(['some-dsl.groovy', 'some-other-dsl.groovy', 'still-another-dsl.groovy'], 'DISABLE')
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == '''some-dsl.groovy
-some-other-dsl.groovy
-still-another-dsl.groovy'''
-        dslStep.usingScriptText[0].value() == false
-        dslStep.ignoreExisting[0].value() ==  false
-        dslStep.removedJobAction[0].value() == 'DISABLE'
-        dslStep.scriptText[0].value() == ''
+        with(context.stepNodes[0]) {
+            name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
+            children().size() == 8
+            targets[0].value() == 'some-dsl.groovy\nsome-other-dsl.groovy\nstill-another-dsl.groovy'
+            usingScriptText[0].value() == false
+            ignoreExisting[0].value() == false
+            removedJobAction[0].value() == 'DISABLE'
+            removedViewAction[0].value() == 'IGNORE'
+            scriptText[0].value() == ''
+            additionalClasspath[0].value() == ''
+            lookupStrategy[0].value() == 'JENKINS_ROOT'
+        }
     }
 
-    def 'call dsl method external script as parameters full' () {
+    def 'call dsl method external script as parameters full'() {
         when:
         context.dsl(['some-dsl.groovy', 'some-other-dsl.groovy', 'still-another-dsl.groovy'], 'DISABLE', true)
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == '''some-dsl.groovy
-some-other-dsl.groovy
-still-another-dsl.groovy'''
-        dslStep.usingScriptText[0].value() == false
-        dslStep.ignoreExisting[0].value() ==  true
-        dslStep.removedJobAction[0].value() == 'DISABLE'
-        dslStep.scriptText[0].value() == ''
+        with(context.stepNodes[0]) {
+            name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
+            children().size() == 8
+            targets[0].value() == 'some-dsl.groovy\nsome-other-dsl.groovy\nstill-another-dsl.groovy'
+            usingScriptText[0].value() == false
+            ignoreExisting[0].value() == true
+            removedJobAction[0].value() == 'DISABLE'
+            removedViewAction[0].value() == 'IGNORE'
+            scriptText[0].value() == ''
+            additionalClasspath[0].value() == ''
+            lookupStrategy[0].value() == 'JENKINS_ROOT'
+        }
     }
 
     def 'call dsl method with script text as parameters'() {
@@ -1259,41 +1267,24 @@ still-another-dsl.groovy'''
 ''', 'DELETE')
 
         then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == ''
-        dslStep.usingScriptText[0].value() == true
-        dslStep.ignoreExisting[0].value() ==  false
-        dslStep.removedJobAction[0].value() == 'DELETE'
-        dslStep.scriptText[0].value() == '''job {
+        with(context.stepNodes[0]) {
+            name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
+            children().size() == 8
+            targets[0].value() == ''
+            usingScriptText[0].value() == true
+            ignoreExisting[0].value() == false
+            removedJobAction[0].value() == 'DELETE'
+            removedViewAction[0].value() == 'IGNORE'
+            scriptText[0].value() == '''job {
   foo()
   bar {
     baz()
   }
 }
 '''
-    }
-
-    def 'call dsl method with additional classpath' () {
-        when:
-        context.dsl {
-            external 'some-dsl.groovy'
-            additionalClasspath 'some/path'
+            additionalClasspath[0].value() == ''
+            lookupStrategy[0].value() == 'JENKINS_ROOT'
         }
-
-        then:
-        context.stepNodes != null
-        context.stepNodes.size() == 1
-        def dslStep = context.stepNodes[0]
-        dslStep.name() == 'javaposse.jobdsl.plugin.ExecuteDslScripts'
-        dslStep.targets[0].value() == 'some-dsl.groovy'
-        dslStep.usingScriptText[0].value() == false
-        dslStep.ignoreExisting[0].value() ==  false
-        dslStep.removedJobAction[0].value() == 'IGNORE'
-        dslStep.scriptText[0].value() == ''
-        dslStep.additionalClasspath[0].value() == 'some/path'
     }
 
     def 'call prerequisite method with single project'() {
@@ -1307,6 +1298,7 @@ still-another-dsl.groovy'''
         prerequisiteStep.name() == 'dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder'
         prerequisiteStep.projects[0].value() == 'project-A'
         prerequisiteStep.warningOnly[0].value() == false
+        1 * jobManagement.requirePlugin('prereq-buildstep')
     }
 
     def 'call prerequisite method with multiple projects'() {
@@ -1320,6 +1312,7 @@ still-another-dsl.groovy'''
         prerequisiteStep.name() == 'dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder'
         prerequisiteStep.projects[0].value() == 'project-A,project-B'
         prerequisiteStep.warningOnly[0].value() == false
+        1 * jobManagement.requirePlugin('prereq-buildstep')
     }
 
     def 'call prerequisite method with multiple projects containing leading spaces'() {
@@ -1333,6 +1326,7 @@ still-another-dsl.groovy'''
         prerequisiteStep.name() == 'dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder'
         prerequisiteStep.projects[0].value() == 'project-A,project-B,project-C'
         prerequisiteStep.warningOnly[0].value() == false
+        1 * jobManagement.requirePlugin('prereq-buildstep')
     }
 
     def 'call prerequisite method with single project and overriden warning only flag'() {
@@ -1346,6 +1340,7 @@ still-another-dsl.groovy'''
         prerequisiteStep.name() == 'dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder'
         prerequisiteStep.projects[0].value() == 'project-A'
         prerequisiteStep.warningOnly[0].value() == true
+        1 * jobManagement.requirePlugin('prereq-buildstep')
     }
 
     def 'call publishOverSsh without server'() {
@@ -1395,7 +1390,6 @@ still-another-dsl.groovy'''
         with(context.stepNodes[0]) {
             name() == 'jenkins.plugins.publish__over__ssh.BapSshBuilderPlugin'
             with(delegate.delegate[0]) {
-
                 consolePrefix[0].value() == 'SSH: '
                 with(delegate.delegate[0]) {
                     with(publishers[0]) {
@@ -1433,6 +1427,7 @@ still-another-dsl.groovy'''
                 }
             }
         }
+        1 * jobManagement.requirePlugin('publish-over-ssh')
     }
 
     def 'call publishOverSsh with complex configuration'() {
@@ -1573,6 +1568,7 @@ still-another-dsl.groovy'''
                 }
             }
         }
+        1 * jobManagement.requirePlugin('publish-over-ssh')
     }
 
     def 'call downstream build step with all args'() {
@@ -1601,8 +1597,8 @@ still-another-dsl.groovy'''
         stepNode.configs[0].children().size() == 2
         with(stepNode.configs[0].'hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig'[0]) {
             projects[0].value() == 'Project1, Project2'
-            condition[0].value() == 'UNSTABLE_OR_BETTER'
-            triggerWithNoParameters[0].value() == 'true'
+            condition[0].value() == 'ALWAYS'
+            triggerWithNoParameters[0].value() == true
             configs[0].'hudson.plugins.parameterizedtrigger.CurrentBuildParameters'[0] instanceof Node
             configs[0].'hudson.plugins.parameterizedtrigger.FileBuildParameters'[0].propertiesFile[0].value() ==
                     'dir/my.properties'
@@ -1633,11 +1629,14 @@ still-another-dsl.groovy'''
 
         with(stepNode.configs[0].'hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig'[1]) {
             projects[0].value() == 'Project2'
-            condition[0].value() == 'SUCCESS'
-            triggerWithNoParameters[0].value() == 'false'
+            condition[0].value() == 'ALWAYS'
+            triggerWithNoParameters[0].value() == false
             configs[0].'hudson.plugins.parameterizedtrigger.CurrentBuildParameters'[0] instanceof Node
             block.isEmpty()
         }
+        1 * jobManagement.requirePlugin('parameterized-trigger')
+        1 * jobManagement.requirePlugin('git')
+        1 * jobManagement.requirePlugin('nodelabelparameter')
 
         when:
         context.downstreamParameterized {
@@ -1648,10 +1647,11 @@ still-another-dsl.groovy'''
         then:
         with(context.stepNodes[1].configs[0].'hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig'[0]) {
             projects[0].value() == 'Project3'
-            condition[0].value() == 'SUCCESS'
-            triggerWithNoParameters[0].value() == 'false'
+            condition[0].value() == 'ALWAYS'
+            triggerWithNoParameters[0].value() == false
             configs[0].attribute('class') == 'java.util.Collections$EmptyList'
         }
+        1 * jobManagement.requirePlugin('parameterized-trigger')
 
         when:
         context.downstreamParameterized {
@@ -1659,7 +1659,7 @@ still-another-dsl.groovy'''
         }
 
         then:
-        thrown(AssertionError)
+        thrown(IllegalArgumentException)
     }
 
     @Unroll
@@ -1675,10 +1675,10 @@ still-another-dsl.groovy'''
 
         then:
         Node step = context.stepNodes[0]
-        step.name() == 'org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder'
-        step.condition[0].children().size() == testConditionArgs.values().size()
+        step.name() == 'org.jenkinsci.plugins.conditionalbuildstep.ConditionalBuilder'
+        step.runCondition[0].children().size() == testConditionArgs.values().size()
 
-        Node condition = step.condition[0]
+        Node condition = step.runCondition[0]
         condition.attribute('class') == "org.jenkins_ci.plugins.run_condition.core.${testConditionClass}"
         if (!testConditionArgs.isEmpty()) {
             testConditionArgs.each { k, v ->
@@ -1687,9 +1687,12 @@ still-another-dsl.groovy'''
         }
         step.runner[0].attribute('class') == 'org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail'
 
-        Node childStep = step.buildStep[0]
-        childStep.attribute('class') == 'hudson.tasks.Shell'
+        step.conditionalbuilders[0].children().size() == 1
+        Node childStep = step.conditionalbuilders[0].children()[0]
+        childStep.name() == 'hudson.tasks.Shell'
         childStep.command[0].value() == 'look at me'
+
+        1 * jobManagement.requirePlugin('conditional-buildstep')
 
         where:
         testCondition << [
@@ -1722,13 +1725,16 @@ still-another-dsl.groovy'''
 
         then:
         Node step = context.stepNodes[0]
-        step.name() == 'org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder'
+        step.name() == 'org.jenkinsci.plugins.conditionalbuildstep.ConditionalBuilder'
 
         step.runner[0].attribute('class') == "org.jenkins_ci.plugins.run_condition.BuildStepRunner\$${runnerName}"
 
-        Node childStep = step.buildStep[0]
-        childStep.attribute('class') == 'hudson.tasks.Shell'
+        step.conditionalbuilders[0].children().size() == 1
+        Node childStep = step.conditionalbuilders[0].children()[0]
+        childStep.name() == 'hudson.tasks.Shell'
         childStep.command[0].value() == 'look at me'
+
+        1 * jobManagement.requirePlugin('conditional-buildstep')
 
         where:
         runnerName << ['Fail', 'Unstable', 'RunUnstable', 'Run', 'DontRun']
@@ -1788,15 +1794,16 @@ still-another-dsl.groovy'''
 
         then:
         Node step = context.stepNodes[0]
-        step.condition[0].children().size() == 1
+        step.runCondition[0].children().size() == 1
 
-        Node notCondition = step.condition[0]
+        Node notCondition = step.runCondition[0]
         notCondition.attribute('class') == 'org.jenkins_ci.plugins.run_condition.logic.Not'
         Node matchCondition = notCondition.condition[0]
         matchCondition.attribute('class') ==  'org.jenkins_ci.plugins.run_condition.core.StringsMatchCondition'
         matchCondition.arg1[0].value() == 'foo'
         matchCondition.arg2[0].value() == 'bar'
         matchCondition.ignoreCase[0].value() == 'false'
+        1 * jobManagement.requirePlugin('conditional-buildstep')
     }
 
     def 'call conditional steps for multiple steps'() {
@@ -1845,11 +1852,11 @@ still-another-dsl.groovy'''
         acmeGroovyNode.groovyName.size() == 1
         acmeGroovyNode.groovyName[0].value() == 'Groovy 2.0'
         acmeGroovyNode.parameters.size() == 1
-        acmeGroovyNode.parameters[0].value() == 'foo\nbar\nbaz'
+        acmeGroovyNode.parameters[0].value() == 'foo bar baz'
         acmeGroovyNode.classPath.size() == 1
         acmeGroovyNode.classPath[0].value() == "/foo/acme.jar${File.pathSeparator}/foo/test.jar"
         acmeGroovyNode.scriptParameters.size() == 1
-        acmeGroovyNode.scriptParameters[0].value() == 'alfa\nbravo\ncharlie'
+        acmeGroovyNode.scriptParameters[0].value() == 'alfa bravo charlie'
         acmeGroovyNode.properties.size() == 1
         acmeGroovyNode.properties[0].value() == 'one=two\nthree=four\nfive=six'
         acmeGroovyNode.javaOpts.size() == 1
@@ -1859,6 +1866,7 @@ still-another-dsl.groovy'''
         acmeScriptSourceNode.attribute('class') == 'hudson.plugins.groovy.StringScriptSource'
         acmeScriptSourceNode.command.size() == 1
         acmeScriptSourceNode.command[0].value() == 'acme.Acme.doSomething()'
+        1 * jobManagement.requirePlugin('conditional-buildstep')
     }
 
     def 'fileExists is added correctly'() {
@@ -1872,12 +1880,13 @@ still-another-dsl.groovy'''
 
         then:
         Node step = context.stepNodes[0]
-        step.condition[0].children().size() == 2
+        step.runCondition[0].children().size() == 2
 
-        Node condition = step.condition[0]
+        Node condition = step.runCondition[0]
         condition.attribute('class') == 'org.jenkins_ci.plugins.run_condition.core.FileExistsCondition'
         condition.file[0].value() == 'someFile'
         condition.baseDir[0].attribute('class') == 'org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace'
+        1 * jobManagement.requirePlugin('conditional-buildstep')
     }
 
     def 'status condition is added correctly'() {
@@ -1891,7 +1900,7 @@ still-another-dsl.groovy'''
 
         then:
         Node step = context.stepNodes[0]
-        Node condition = step.condition[0]
+        Node condition = step.runCondition[0]
 
         condition.attribute('class') == 'org.jenkins_ci.plugins.run_condition.core.StatusCondition'
         condition.children().size() == 2
@@ -1900,6 +1909,7 @@ still-another-dsl.groovy'''
         condition.worstResult[0].ordinal[0].value() == 2
         condition.bestResult[0].children().size() == 1
         condition.bestResult[0].ordinal[0].value() == 0
+        1 * jobManagement.requirePlugin('conditional-buildstep')
     }
 
     @Unroll
@@ -1919,7 +1929,7 @@ still-another-dsl.groovy'''
         then:
         Node step = context.stepNodes[0]
 
-        def logicOperation = step.condition[0]
+        def logicOperation = step.runCondition[0]
         logicOperation.attribute('class') == operation
         logicOperation.children().size() == 1
 
@@ -1933,6 +1943,7 @@ still-another-dsl.groovy'''
             baseDir[0].attribute('class') == 'org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace'
         }
         containers[1].condition[0].attribute('class') == 'org.jenkins_ci.plugins.run_condition.core.AlwaysRun'
+        1 * jobManagement.requirePlugin('conditional-buildstep')
 
         where:
         dslOperation | operation
@@ -1953,13 +1964,14 @@ still-another-dsl.groovy'''
 
         then:
         Node step = context.stepNodes[0]
-        Node conditionNode = step.condition[0]
+        Node conditionNode = step.runCondition[0]
         conditionNode.children().size() == argNodes.size()
 
         conditionNode.attribute('class') == conditionClass
         def ignored = argNodes.each { name, value ->
             assert conditionNode[name][0].value() == value
         }
+        1 * jobManagement.requirePlugin('conditional-buildstep')
 
         where:
         conditionDsl       | args                     | conditionClass                                                        | argNodes
@@ -2032,6 +2044,7 @@ still-another-dsl.groovy'''
         envNode.info[0].children().size() == 2
         envNode.info[0].propertiesFilePath[0].value() == 'some.properties'
         envNode.info[0].propertiesContent[0].value() == 'test=some\nother=any\nsome=value'
+        1 * jobManagement.requirePlugin('envinject')
     }
 
     def 'call remoteTrigger with minimal options'() {
@@ -2065,6 +2078,7 @@ still-another-dsl.groovy'''
             parameterFile[0].value() == []
             queryString[0].value() == []
         }
+        1 * jobManagement.requirePlugin('Parameterized-Remote-Trigger')
     }
 
     def 'call remoteTrigger with parameters'() {
@@ -2103,6 +2117,7 @@ still-another-dsl.groovy'''
             parameterFile[0].value() == []
             queryString[0].value() == []
         }
+        1 * jobManagement.requirePlugin('Parameterized-Remote-Trigger')
     }
 
     def 'call remoteTrigger with parameters and config'() {
@@ -2145,6 +2160,7 @@ still-another-dsl.groovy'''
             parameterFile[0].value() == []
             queryString[0].value() == []
         }
+        1 * jobManagement.requirePlugin('Parameterized-Remote-Trigger')
     }
 
     def 'call remoteTrigger without jenkins'() {
@@ -2186,6 +2202,7 @@ still-another-dsl.groovy'''
         context.stepNodes[0].name() == 'org.jvnet.hudson.plugins.exclusion.CriticalBlockStart'
         context.stepNodes[1].name() == 'hudson.tasks.Shell'
         context.stepNodes[2].name() == 'org.jvnet.hudson.plugins.exclusion.CriticalBlockEnd'
+        1 * jobManagement.requirePlugin('Exclusion')
     }
 
     def 'call rake method'() {
@@ -2205,6 +2222,7 @@ still-another-dsl.groovy'''
         rakeStep.tasks[0].value() == ''
         rakeStep.silent[0].value() == false
         rakeStep.bundleExec[0].value() == false
+        1 * jobManagement.requirePlugin('rake')
     }
 
     def 'call rake method with tasks as argument'() {
@@ -2231,6 +2249,7 @@ still-another-dsl.groovy'''
         rakeStep.tasks[0].value() == 'test'
         rakeStep.silent[0].value() == true
         rakeStep.bundleExec[0].value() == true
+        1 * jobManagement.requirePlugin('rake')
     }
 
     def 'call rake method with tasks in closure'() {
@@ -2253,6 +2272,7 @@ still-another-dsl.groovy'''
         rakeStep.tasks[0].value() == 'first second'
         rakeStep.silent[0].value() == false
         rakeStep.bundleExec[0].value() == false
+        1 * jobManagement.requirePlugin('rake')
     }
 
     def 'call rake method with task as argument and tasks in closure'() {
@@ -2276,6 +2296,7 @@ still-another-dsl.groovy'''
         rakeStep.tasks[0].value() == 'first second third fourth fifth'
         rakeStep.silent[0].value() == false
         rakeStep.bundleExec[0].value() == false
+        1 * jobManagement.requirePlugin('rake')
     }
 
     def 'call rake method with default arguments in closure'() {
@@ -2299,6 +2320,7 @@ still-another-dsl.groovy'''
         rakeStep.tasks[0].value() == 'first'
         rakeStep.silent[0].value() == true
         rakeStep.bundleExec[0].value() == true
+        1 * jobManagement.requirePlugin('rake')
     }
 
     def 'vSphere power off'() {
@@ -2321,6 +2343,7 @@ still-another-dsl.groovy'''
             serverName[0].value() == 'vsphere.acme.org'
             serverHash[0].value() == 4711
         }
+        1 * jobManagement.requirePlugin('vsphere-cloud')
     }
 
     def 'vSphere power on'() {
@@ -2342,6 +2365,7 @@ still-another-dsl.groovy'''
             serverName[0].value() == 'vsphere.acme.org'
             serverHash[0].value() == 4711
         }
+        1 * jobManagement.requirePlugin('vsphere-cloud')
     }
 
     def 'vSphere revert to snapshot'() {
@@ -2363,6 +2387,7 @@ still-another-dsl.groovy'''
             serverName[0].value() == 'vsphere.acme.org'
             serverHash[0].value() == 4711
         }
+        1 * jobManagement.requirePlugin('vsphere-cloud')
     }
 
     def 'vSphere server not found'() {
@@ -2384,6 +2409,7 @@ still-another-dsl.groovy'''
             children().size() == 1
             url[0].value() == 'http://www.example.com'
         }
+        1 * jobManagement.requirePlugin('http_request')
     }
 
     def 'call http request with all options'() {
@@ -2406,6 +2432,7 @@ still-another-dsl.groovy'''
             returnCodeBuildRelevant[0].value() == true
             logResponseBody[0].value() == true
         }
+        1 * jobManagement.requirePlugin('http_request')
     }
 
     def 'call http request with invalid HTTP mode'() {
@@ -2432,8 +2459,60 @@ still-another-dsl.groovy'''
             url[0].value() == 'http://www.example.com'
             httpMode[0].value() == mode
         }
+        1 * jobManagement.requirePlugin('http_request')
 
         where:
         mode << ['GET', 'POST', 'PUT', 'DELETE']
+    }
+
+    def 'call nodejsCommand method'() {
+        when:
+        context.nodejsCommand('var test = require("node");', 'node (0.0.1)')
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'jenkins.plugins.nodejs.NodeJsCommandInterpreter'
+            children().size() == 2
+            command[0].value() == 'var test = require("node");'
+            nodeJSInstallationName[0].value() == 'node (0.0.1)'
+        }
+        1 * jobManagement.requirePlugin('nodejs')
+    }
+
+    def 'call debian package with only required option'() {
+        when:
+        context.debianPackage('package')
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'ru.yandex.jenkins.plugins.debuilder.DebianPackageBuilder'
+            children().size() == 5
+            pathToDebian[0].value() == 'package'
+            nextVersion[0].value() == ''
+            generateChangelog[0].value() == false
+            signPackage[0].value() == true
+            buildEvenWhenThereAreNoChanges[0].value() == false
+        }
+        1 * jobManagement.requireMinimumPluginVersion('debian-package-builder', '1.6.6')
+    }
+
+    def 'call debian package with all options'() {
+        when:
+        context.debianPackage('package') {
+            signPackage(false)
+            generateChangelog('1.0', true)
+        }
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'ru.yandex.jenkins.plugins.debuilder.DebianPackageBuilder'
+            children().size() == 5
+            pathToDebian[0].value() == 'package'
+            nextVersion[0].value() == '1.0'
+            generateChangelog[0].value() == true
+            signPackage[0].value() == false
+            buildEvenWhenThereAreNoChanges[0].value() == true
+        }
+        1 * jobManagement.requireMinimumPluginVersion('debian-package-builder', '1.6.6')
     }
 }

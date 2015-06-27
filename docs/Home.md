@@ -16,7 +16,98 @@ If you want to get fancy you'll want to read up on [[configure block|The Configu
 Have a look at the [Jenkins Job DSL Gradle example](https://github.com/sheehan/job-dsl-gradle-example) to see how to organize a SCM repository for Job DSL scripts.
 
 ## Release Notes
-* 1.31 (unreleased)
+* 1.35 (unreleased)
+ * Added support for the [Build Flow Test Aggregator Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Flow+Test+Aggregator+Plugin)
+   ([JENKINS-28851](https://issues.jenkins-ci.org/browse/JENKINS-28851))
+ * Added closure method for logRotator
+ * Allow to extend the trigger context
+   ([JENKINS-28562](https://issues.jenkins-ci.org/browse/JENKINS-28562))
+ * Enhanced DSL support for the Job DSL plugin
+ * Fixed problem when deleting views from already deleted folder
+   ([JENKINS-28458](https://issues.jenkins-ci.org/browse/JENKINS-28458))
+ * Fixed [Parameterized Trigger Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Parameterized+Trigger+Plugin) build step
+   ([JENKINS-28353](https://issues.jenkins-ci.org/browse/JENKINS-28353))
+ * Fixed problem with implementing the extension point 
+   ([JENKINS-28408](https://issues.jenkins-ci.org/browse/JENKINS-28408))
+ * Provide better error message when trying to move a job into a non-existing folder 
+   ([JENKINS-28408](https://issues.jenkins-ci.org/browse/JENKINS-29100))
+ * Enhanced support for the [HTML Publisher Plugin](https://wiki.jenkins-ci.org/display/JENKINS/HTML+Publisher+Plugin)
+   ([JENKINS-28564](https://issues.jenkins-ci.org/browse/JENKINS-28564))
+ * Enhanced support for the [Config File Provider Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Config+File+Provider+Plugin)
+ * Added support for the latest version of the [S3 Plugin](https://wiki.jenkins-ci.org/display/JENKINS/S3+Plugin)
+   ([JENKINS-26561](https://issues.jenkins-ci.org/browse/JENKINS-26561))
+ * Support for the older versions of the [S3 Plugin](https://wiki.jenkins-ci.org/display/JENKINS/S3+Plugin) is deprecated, see [[Migration]]
+ * Removed anything that has been deprecated in 1.27, see [[Migration#migrating-to-127]]
+   ([JENKINS-27492](https://issues.jenkins-ci.org/browse/JENKINS-27492))
+* 1.34 (May 08 2015)
+ * Enhanced support for the [Publish Over SSH Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Publish+Over+SSH+Plugin)
+   ([JENKINS-26636](https://issues.jenkins-ci.org/browse/JENKINS-26636))
+ * Fixed XML encoding issue when using a single conditional build step
+   ([JENKINS-28308](https://issues.jenkins-ci.org/browse/JENKINS-28308))
+ * Fixed issue with multiple (script) parameters for Groovy build steps
+   ([JENKINS-28310](https://issues.jenkins-ci.org/browse/JENKINS-28310))
+ * Deprecated an undocumented variant of the `runner` method in `conditionalSteps` context, see [[Migration]]
+* 1.33 (May 07 2015)
+ * Enhanced support for the [Git Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin)
+   ([JENKINS-27891](https://issues.jenkins-ci.org/browse/JENKINS-27891), [JENKINS-28264](https://issues.jenkins-ci.org/browse/JENKINS-28264))
+ * Added support for the [Build Publisher Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Publisher+Plugin)
+ * Added support for the [Naginator Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Naginator+Plugin)
+ * Added support for the [Sidebar-Link Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Sidebar-Link+Plugin)
+ * Added support for the [Custom Job Icon Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Custom+Job+Icon+Plugin)
+ * Added support for "Build after other projects are built" trigger
+ * Added more options for `archiveArtifacts`
+ * The `latestOnly` option of `archiveArtifacts` is deprecated, see [[Migration]]
+ * Enhanced support for the [Robot Framework Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin)
+ * Enhanced support for [RunDeck Plugin](https://wiki.jenkins-ci.org/display/JENKINS/RunDeck+Plugin)
+ * Enhanced support for the [Mercurial Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Mercurial+Plugin)
+ * Support for the older versions of the [Mercurial Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Mercurial+Plugin) is deprecated, see [[Migration]]
+ * Enhanced support for the [Flexible Publish Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Flexible+Publish+Plugin)
+ * Support for the older versions of the [Flexible Publish Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Flexible+Publish+Plugin) is deprecated, see [[Migration]]
+ * Enhanced support for the [Copy Artifact Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Copy+Artifact+Plugin)
+   ([JENKINS-27838](https://issues.jenkins-ci.org/browse/JENKINS-27838), [JENKINS-27894](https://issues.jenkins-ci.org/browse/JENKINS-27894))
+ * Enhanced support for the [GitHub Pull Request Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin)
+   ([JENKINS-27932](https://issues.jenkins-ci.org/browse/JENKINS-27932))
+ * Support for the older versions of the [Copy Artifact Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Copy+Artifact+Plugin) is deprecated, see [[Migration]]
+ * Enhanced support for the [Robot Framework Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin)
+ * Support for the older versions of the [Robot Framework Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin) is deprecated, see [[Migration]]
+ * Variants of `copyArtifacts` with more than two parameters have been replaced and are deprecated, see [[Migration]]
+ * Added a Jenkins extension point for adding DSL methods
+ * Added support for [HipChat Plugin](https://wiki.jenkins-ci.org/display/JENKINS/HipChat+Plugin)
+ * Added support for uploading [user conent](https://wiki.jenkins-ci.org/display/JENKINS/User+Content)
+ * Increased the minimum supported Jenkins version to 1.565
+   ([JENKINS-28167](https://issues.jenkins-ci.org/browse/JENKINS-28167))
+* 1.32 (April 07 2015)
+ * Added support for [PowerShell Plugin](https://wiki.jenkins-ci.org/display/JENKINS/PowerShell+Plugin)
+   ([JENKINS-27820](https://issues.jenkins-ci.org/browse/JENKINS-27820))
+ * Fixed problem with publishers in Maven jobs
+   ([JENKINS-27767](https://issues.jenkins-ci.org/browse/JENKINS-27767))
+* 1.31 (April 04 2015)
+ * Added support for [Categorized Jobs View](https://wiki.jenkins-ci.org/display/JENKINS/Categorized+Jobs+View)
+ * Added support for [Build Node Column Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Node+Column+Plugin)
+ * Added support for [Pre-SCM Build Step Plugin](https://wiki.jenkins-ci.org/display/JENKINS/pre-scm-buildstep)
+ * Added support for [Sonar Plugin](http://docs.sonarqube.org/display/SONAR/Jenkins+Plugin)
+ * Added support for [Debian Package Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Debian+Package+Builder+Plugin)
+ * Added support for [Plot Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Plot+Plugin)
+ * Added support for [Git Parameter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Git+Parameter+Plugin)
+ * Added `recurse` option for list views
+ * Added `ignorePostCommitHooks` option for SCM trigger
+ * Added `commentFilePath` option for [GitHub Pull Request Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin)
+ * Added "Configure Project" column for [Extra Columns Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Extra+Columns+Plugin)
+ * Added support for [PostBuildScript Plugin](https://wiki.jenkins-ci.org/display/JENKINS/PostBuildScript+Plugin)
+ * Added support for [Xvfb Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Xvfb+Plugin)
+ * Enhanced support for the [Credentials Binding Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Credentials+Binding+Plugin)
+ * Enhanced support for the [Multijob Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Multijob+Plugin)
+ * Enhanced support for the [NodeJS Plugin](https://wiki.jenkins-ci.org/display/JENKINS/NodeJS+Plugin)
+ * Enhanced support for the [Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin)
+ * Enhanced support for the [Description Setter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Description+Setter+Plugin)
+ * Enhanced support for ([Cloudbees Folders Plugin](https://wiki.jenkins-ci.org/display/JENKINS/CloudBees+Folders+Plugin))
+ * Support all available permissions ([JENKINS-16365](https://issues.jenkins-ci.org/browse/JENKINS-16365))
+ * Deprecated the Permissions enum, see [[Migration]]
+ * The `tagFilterRegex` argument of `listTagsParam` can be null or empty
+ * The enum argument of `localRepository` for the Maven job and context has changed, see [[Migration]]
+ * Support for the older versions of the [Multijob Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Multijob+Plugin) is deprecated, see [[Migration]]
+ * The views closure of the nested view type has been changed, see [[Migration]]
+ * Removed anything that has been deprecated in 1.26, see [[Migration#migrating-to-126]]
 * 1.30 (March 08 2015)
  * Added support for [Custom Tools Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Custom+Tools+Plugin)
  * Added support for [Flaky Test Handler Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Flaky+Test+Handler+Plugin)

@@ -29,16 +29,17 @@ freeStyleJob(String name) { // since 1.30
     keepDependencies(boolean keep = true)
     label(String label)
     lockableResources(String resources, Closure lockableResourcesClosure) // since 1.25
-    logRotator(int daysToKeep = -1, int numToKeep = -1, int artifactDaysToKeep = -1,
-               int artifactNumToKeep = -1)
+    logRotator(int daysToKeep = -1, int numToKeep = -1,
+               int artifactDaysToKeep = -1, int artifactNumToKeep = -1)
+    logRotator(Closure logRotatorClosure) // since 1.25
     notifications(Closure notificationClosure) // since 1.26
     priority(int value)
     quietPeriod(int seconds = 5)
     throttleConcurrentBuilds(Closure throttleClosure)
     authorization {
         permission(String permission)
-        permission(String permEnumName, String user)
-        permission(Permissions perm, String user)
+        permission(String permission, String user)
+        permission(Permissions perm, String user) // deprecated since 1.31
         permissionAll(String user)
     }
     parameters {
@@ -46,6 +47,7 @@ freeStyleJob(String name) { // since 1.30
                      String description = null)
         choiceParam(String parameterName, List<String> options, String description = null)
         fileParam(String fileLocation, String description = null)
+        gitParam(String parameterName, Closure closure = null) // since 1.31
         labelParam(String parameterName, Closure closure = null) // since 1.30
         listTagsParam(String parameterName, String scmUrl, String tagFilterRegex,
                       boolean sortNewestFirst = false, boolean sortZtoA = false,
@@ -70,6 +72,7 @@ freeStyleJob(String name) { // since 1.30
         github(String ownerAndProject, String branch = null, String protocol = 'https',
                String host = 'github.com', Closure configure = null)
         hg(String url, String branch = null, Closure configure = null)
+        hg(String url, Closure hgClosure) // since 1.33
         p4(String viewspec, Closure configure = null)
         p4(String viewspec, String user, Closure configure = null)
         p4(String viewspec, String user, String password, Closure configure = null)
@@ -84,9 +87,12 @@ freeStyleJob(String name) { // since 1.30
         gerrit(Closure gerritClosure = null)
         githubPush()
         pullRequest(Closure pullRequestClosure) // since 1.22
+        rundeck(Closure rundeckTriggerClosure = null) // since 1.33
         scm(String cron)
+        scm(String cron, Closure scmTriggerClosure) // since 1.31
         snapshotDependencies(boolean checkSnapshotDependencies)
         urlTrigger(String cronString = null, Closure urlTriggerClosure)
+        upstream(String projects, String threshold = 'SUCCESS') // since 1.33
     }
     wrappers { // since 1.19, before that the methods were on top level
         allocatePorts(Closure closure = null)
@@ -108,6 +114,7 @@ freeStyleJob(String name) { // since 1.30
         maskPasswords() // since 1.26
         nodejs(String installation) // since 1.27
         preBuildCleanup(Closure closure = null) // since 1.22
+        preScmSteps(Closure closure) // since 1.31
         rbenv(String rubyVersion, Closure rbenvClosure = null) // since 1.27
         release(Closure releaseClosure) // since 1.22
         runOnSameNodeAs(String jobName, boolean useSameWorkspace = false)
@@ -116,8 +123,13 @@ freeStyleJob(String name) { // since 1.30
         timeout(Closure timeoutClosure = null)
         timestamps()
         toolenv(String... tools)
+        xvfb(String installation, Closure xvfbClosure = null) // since 1.31
         xvnc(boolean takeScreenshot) // deprecated
         xvnc(Closure xvncClosure = null) // since 1.26
+    }
+    properties { // since 1.33
+        customIcon(String iconFileName)
+        sidebarLinks(Closure sidebarLinkClosure)
     }
     steps {
         ant(Closure antClosure = null)
@@ -126,16 +138,21 @@ freeStyleJob(String name) { // since 1.30
         ant(String targets, String buildFile, String antInstallation,
             Closure antClosure = null)
         batchFile(String command)
+        buildDescription(String regexp, String description = null) // since 1.31
         conditionalSteps(Closure conditionalClosure)
-        copyArtifacts(String jobName, String includeGlob, Closure copyArtifactClosure)
+        copyArtifacts(String jobName, String includeGlob,
+                      Closure buildSelectorClosure)  // deprecated since 1.33
         copyArtifacts(String jobName, String includeGlob, String targetPath,
-                      Closure copyArtifactClosure)
+                      Closure buildSelectorClosure)  // deprecated since 1.33
         copyArtifacts(String jobName, String includeGlob, String targetPath = '',
-                      boolean flattenFiles, Closure copyArtifactClosure)
+                      boolean flattenFiles,
+                      Closure buildSelectorClosure)  // deprecated since 1.33
         copyArtifacts(String jobName, String includeGlob, String targetPath = '',
                       boolean flattenFiles, boolean optionalAllowed,
-                      Closure copyArtifactClosure)
+                      Closure buildSelectorClosure) // deprecated since 1.33
+        copyArtifacts(String jobName, Closure copyArtifactClosure = null) // since 1.33
         criticalBlock(Closure stepClosure) // since 1.24
+        debianPackage(String path, Closure debianClosure = null) // since 1.31
         downstreamParameterized(Closure downstreamClosure)
         dsl(Closure dslClosure)
         dsl(String scriptText, String removedJobAction = null,
@@ -153,12 +170,14 @@ freeStyleJob(String name) { // since 1.30
         groovyCommand(String command, String groovyName, Closure groovyClosure = null)
         groovyScriptFile(String fileName, Closure groovyClosure = null)
         groovyScriptFile(String fileName, String groovyName, Closure groovyClosure = null)
+        nodejsCommand(String command, String nodeVersion) // since 1.31
         httpRequest(String url, Closure closure = null) // since 1.28
         maven(Closure mavenClosure) // since 1.20
         maven(String target = null, String pom = null, Closure configure = null)
         phase(Closure phaseClosure)
         phase(String name, Closure phaseClosure = null)
         phase(String name, String continuationConditionArg, Closure phaseClosure)
+        powerShell(String command) // since 1.32
         prerequisite(String projectList = '', boolean warningOnly = false) // since 1.19
         publishOverSsh(Closure publishOverSshClosure) // since 1.28
         rake(Closure rakeClosure = null) // since 1.25
@@ -176,6 +195,7 @@ freeStyleJob(String name) { // since 1.30
         vSphereRevertToSnapshot(String server, String vm, String snapshot)
     }
     publishers {
+        aggregateBuildFlowTests() // since 1.35
         aggregateDownstreamTestResults(String jobs = null,
                                        boolean includeFailedBuilds = false) // since 1.19
         allowBrokenBuildClaiming()
@@ -200,6 +220,7 @@ freeStyleJob(String name) { // since 1.30
         chucknorris()
         cobertura(String coberturaReportFilePattern, Closure coberturaClosure = null)
         dependencyCheck(String pattern, Closure staticAnalysisClosure = null)
+        deployArtifacts(Closure deployArtifactsClosure = null) // since 1.31
         downstream(String projectName, String thresholdName = 'SUCCESS')
         downstreamParameterized(Closure downstreamClosure)
         dry(String pattern, highThreshold = 50, normalThreshold = 25,
@@ -219,14 +240,19 @@ freeStyleJob(String name) { // since 1.30
         git(Closure gitPublisherClosure) // since 1.22
         githubCommitNotifier() // since 1.21
         groovyPostBuild(String script, Behavior behavior = Behavior.DoNothing) // since 1.19
+        hipChat(Closure hipChatClosure = null) // since 1.33
         irc(Closure ircClosure)
         jacocoCodeCoverage(Closure jacocoClosure)
         jshint(String pattern, Closure staticAnalysisClosure = null)
         mailer(String recipients, Boolean dontNotifyEveryUnstableBuild = false,
                Boolean sendToIndividuals = false)
         mavenDeploymentLinker(String regex) // since 1.23
+        mergePullRequest(Closure pullRequestClosure = null) // since 1.33
+        plotBuildData(Closure closure) // since 1.31
         pmd(String pattern, Closure staticAnalysisClosure = null)
+        postBuildScripts(Closure postBuildScriptsClosure) // since 1.31
         postBuildTask(Closure closure) // since 1.19
+        publishBuild(Closure closure = null) // since 1.33
         publishCloneWorkspace(String workspaceGlob, Closure cloneWorkspaceClosure)
         publishCloneWorkspace(String workspaceGlob, String workspaceExcludeGlob,
                               Closure cloneWorkspaceClosure)
@@ -243,10 +269,13 @@ freeStyleJob(String name) { // since 1.30
                       Closure jabberClosure = null) // deprecated since 1.30
         publishJabber(String target, String strategyName, String channelNotificationName,
                       Closure jabberClosure = null) // deprecated since 1.30
+        publishOverSsh(Closure publishOverSshClosure) // since 1.34
         publishRobotFrameworkReports(Closure closure = null) // since 1.21
         publishScp(String site, Closure scpClosure)
+        retryBuild(Closure naginatorClosure = null) // since 1.33
         rundeck(String jobId, Closure rundeckClosure = null) // since 1.24
         s3(String profile, Closure s3Closure) // since 1.26
+        sonar(Closure sonarClosure = null) // since 1.31
         stashNotifier(Closure stashNotifierClosure = null) // since 1.23
         tasks(String pattern, excludePattern = '', high = '', normal = '', low = '',
               ignoreCase = false, Closure staticAnalysisClosure = null)
@@ -445,11 +474,34 @@ blockOnDownstreamProjects()
 Blocks the build of a project when one ore more upstream (blockOnUpstreamProjects()) or a downstream projects (blockOnDownstreamProjects()) are running. (Available since 1.16)
 
 ### Build History
+
 ```groovy
-logRotator(int daysToKeepInt = -1, int numToKeepInt = -1, int artifactDaysToKeepInt = -1, int artifactNumToKeepInt = -1)
+job {
+    logRotator(int daysToKeep = -1, int numToKeep = -1,
+               int artifactDaysToKeep = -1, int artifactNumToKeep = -1)
+    logRotator { // since 1.35
+        daysToKeep(int daysToKeep)
+        numToKeep(int numToKeep)
+        artifactDaysToKeep(int artifactDaysToKeep)
+        artifactNumToKeep(int artifactNumToKeep)
+    }
+}
 ```
 
 Sets up the number of builds to keep.
+
+```groovy
+job('example-1') {
+    logRotator(30, -1, 1, -1)
+}
+
+job('example-2') {
+    logRotator {
+        numToKeep(5)
+        artifactNumToKeep(1)
+    }
+}
+```
 
 ### Execute concurrent builds
 ```groovy
@@ -549,36 +601,39 @@ job('example-3') {
 job {
     authorization {
         permission(String)
-        permission(String permEnumName, String user)
-        permission(Permissions perm, String user)
+        permission(String permission, String user)
         permissionAll(String user)
+        permission(Permissions perm, String user) // deprecated since 1.31
     }
 }
 ```
 
-Creates permission records. The first form adds a specific permission, e.g. 'hudson.model.Item.Workspace:authenticated', as seen in the config.xml. The second form simply breaks apart the permission from the user name, to make scripting easier. The third uses a helper Enum called [Permissions] (https://github.com/jenkinsci/job-dsl-plugin/blob/master/job-dsl-core/src/main/groovy/javaposse/jobdsl/dsl/helpers/Permissions.groovy) to hide some of the names of permissions. It is available by importing javaposse.jobdsl.dsl.helpers.Permissions. By using the enum you get some basic type checking. A flaw with this system is that Jenkins plugins can create their own permissions, and the job-dsl plugin doesn't necessarily know about them. The last form will take everything in the Permissions enum and gives them to the user, this method also suffers from the problem that not all permissions from every plugin are included.
+Creates permission records. Requires the
+[Matrix Authorization Strategy Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Matrix+Authorization+Strategy+Plugin).
 
-The permissions as of the latest version can be found in [the Permissions enum](https://github.com/jenkinsci/job-dsl-plugin/blob/master/job-dsl-core/src/main/groovy/javaposse/jobdsl/dsl/helpers/Permissions.groovy). For illustration, [Permissions](https://github.com/jenkinsci/job-dsl-plugin/blob/master/job-dsl-core/src/main/groovy/javaposse/jobdsl/dsl/helpers/Permissions.groovy) here are a couple of examples:
+The first form adds a specific permission, e.g. `'hudson.model.Item.Workspace:authenticated'`, as seen in config.xml.
+The second form breaks apart the permission from the user name, to make scripting easier. The third form will add all
+available permission for the user.
 
 ```groovy
-// Gives permission for the special authenticated group to see the workspace of the job
+// add a permission for the special authenticated group to see the workspace of the job
 job('example-1') {
     authorization {
         permission('hudson.model.Item.Workspace:authenticated')
     }
 }
 
-// Gives discover permission for the special anonymous user
+// adds the build permission for the special anonymous user
 job('example-2') {
     authorization {
-        permission(Permissions.ItemDiscover, 'anonymous')
+        permission('hudson.model.Item.Build', 'anonymous')
     }
 }
 
-// Gives all permissions found in the Permissions enum to the special authenticated group
+// add all permissions for user joe
 job('example-3') {
     authorization {
-        permissionAll('authenticated')
+        permissionAll('joe')
     }
 }
 ```
@@ -676,7 +731,7 @@ Examples:
 Triple-quote can be used for retaining Groovy style in the embedded DSL.
 
 ```groovy
-job('example-1', type: BuildFlow) {
+buildFlowJob('example-1') {
     buildFlow("""
         build("job1")
     """)
@@ -687,7 +742,7 @@ Using job variables in build flow text block. The new job will have a build flow
 
 ```groovy
 CUSTOM_VARIABLE = "hello-there"
-job('example-2', type: BuildFlow) {
+buildFlowJob('example-2') {
     buildFlow('build("${CUSTOM_VARIABLE}")')
 }
 ```
@@ -695,7 +750,7 @@ job('example-2', type: BuildFlow) {
 The build flow text can also be stored in a file and set in the new job when it's created.
 
 ```groovy
-job('example-3', type: BuildFlow) {
+buildFlowJob('example-3') {
     buildFlow(readFileFromWorkspace("my-build-flow-text.groovy"))
 }
 ```
@@ -708,15 +763,21 @@ The `rootPOM`, `goals`, `mavenOpts`, `mavenInstallation`, `perModuleEmail`, `arc
  `preBuildSteps`, `postBuildSteps` and `providedSettings` methods can only be used in jobs with type `Maven`.
 
 ### Root POM
+
 ```groovy
-rootPOM(String rootPOM)
+mavenJob {
+    rootPOM(String rootPOM)
+}
 ```
 
 To use a different `pom.xml` in some other directory than the workspace root.
 
 ### Goals
+
 ```groovy
-goals(String goals)
+mavenJob {
+    goals(String goals)
+}
 ```
 
 The Maven goals to execute including other command line options.
@@ -724,27 +785,37 @@ The Maven goals to execute including other command line options.
 When specified multiple times, the goals and options will be concatenated, e.g.
 
 ```groovy
-goals("clean")
-goals("install")
-goals("-DskipTests")
+mavenJob('example-1') {
+    goals('clean')
+    goals('install')
+    goals('-DskipTests')
+}
 ```
 
 is equivalent to
 
 ```groovy
-goals("clean install -DskipTests")
+mavenJob('example-1') {
+    goals('clean install -DskipTests')
+}
 ```
 
 ### MAVEN_OPTS
+
 ```groovy
-mavenOpts(String mavenOpts)
+mavenJob {
+    mavenOpts(String mavenOpts)
+}
 ```
 
 The JVM options to be used when starting Maven. When specified multiple times, the options will be concatenated.
 
 ### Maven Installation
+
 ```groovy
-mavenInstallation(String name)
+mavenJob {
+    mavenInstallation(String name)
+}
 ```
 
 Refers to the pull down box in the UI to select which installation of Maven to use, specify the exact string seen in the UI. The last call will be the one used.
@@ -754,49 +825,66 @@ Refers to the pull down box in the UI to select which installation of Maven to u
 ### Isolated Local Maven Repository
 
 ```groovy
-localRepository(LocalRepositoryLocation location)
+mavenJob {
+    localRepository(LocalRepositoryLocation location)
+}
 ```
 
-LocalRepositoryLocation is available as two enums, injected into the script. Their names are LocalToExecutor and LocalToWorkspace, they can be used like this:
+Possible values for `localRepository` are `LocalRepositoryLocation.LOCAL_TO_WORKSPACE` and
+`LocalRepositoryLocation.LOCAL_TO_EXECUTOR`. The `LocalToWorkspace` and `LocalToExecutor` values are deprecated since
+1.31.
 
 ```groovy
-localRepository(LocalToWorkspace)
+mavenJob {
+    localRepository(LocalRepositoryLocation.LOCAL_TO_WORKSPACE)
+}
 ```
 
 (Since 1.17)
 
 ### Email Per Module
+
 ```groovy
-perModuleEmail(boolean shouldSendEmailPerModule) // deprecated since 1.29
+mavenJob {
+    perModuleEmail(boolean sendEmailPerModule) // deprecated since 1.29
+}
 ```
 
 Enable or disable email notifications for each Maven module.
 
 ### Disable Artifact Archiving
+
 ```groovy
-archivingDisabled(boolean shouldDisableArchiving)
+mavenJob {
+    archivingDisabled(boolean shouldDisableArchiving)
+}
 ```
 
 Disables automatic Maven artifact archiving. Artifact archiving is enabled by default.
 
 ### Run Headless
+
 ```groovy
-runHeadless(boolean shouldRunHeadless)
+mavenJob {
+    runHeadless(boolean shouldRunHeadless)
+}
 ```
 
 Specifiy this to run the build in headless mode if desktop access is not required. Headless mode is not enabled by default.
 
 ### Maven Pre and Post Build Steps
+
 ```groovy
-preBuildSteps(Closure mavenPreBuildClosure)
-postBuildSteps(Closure mavenPostBuildClosure)
+mavenJob {
+    preBuildSteps(Closure mavenPreBuildClosure)
+    postBuildSteps(Closure mavenPostBuildClosure)
+}
 ```
 
 For Maven jobs, you can also run arbitrary build steps before and after the Maven execution. Note that this can only be used with Maven jobs.
 
-Examples:
 ```groovy
-job('example', type: Maven) {
+mavenJob('example') {
   preBuildSteps {
     shell("echo 'run before Maven'")
   }
@@ -811,7 +899,7 @@ job('example', type: Maven) {
 ### Maven Settings
 
 ```groovy
-job(type: Maven) {
+mavenJob {
     providedSettings(String mavenSettingsName)
 }
 ```
@@ -819,10 +907,8 @@ job(type: Maven) {
 Use managed Maven settings. Requires the
 [Config File Provider Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Config+File+Provider+Plugin).
 
-Example:
-
 ```groovy
-job('example', type: Maven) {
+mavenJob('example') {
     providedSettings('central-mirror')
 }
 ```
@@ -888,64 +974,118 @@ The parameterless invocation sets a default retry count of three (3) times. To s
 ### Mercurial
 
 ```groovy
-hg(String url, String branch = null, Closure configure = null)
+job {
+    scm {
+        hg(String url) { // since 1.33
+            installation(String installation)  // use a specific installation
+            credentials(String credentialsId)  // use pre-defined credentials
+            branch(String branch)              // checkout selected branch
+            tag(String tag)                    // checkout selected tag
+            modules(String... modules)         // checkout selected modules
+            clean(boolean clean = true)        // defaults to false
+            subdirectory(String subdirectory)  // checkout into subdirectory
+            disableChangeLog(boolean disable = true) // defaults to false
+            configure(Closure configure)       // optional configure block
+        }
+
+        hg(String url, String branch = null, Closure configure = null)
+    }
+}
 ```
 
-Add Mercurial SCM source. Will not clean by default, to change this use the configure block, e.g.
+Adds a Mercurial SCM source. Requires the
+[Mercurial Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Mercurial+Plugin). The first variant can be used for
+advanced configuration (since 1.33) and requires version 1.50.1 or later of the Mercurial plugin, the other variant is a
+shortcut for simpler Mercurial SCM configuration. Support for versions older than 1.50.1 is deprecated and will be
+removed.
+
+A [[configure block|The-Configure-Block]] can be used to add more options. The `scm` node is passed into the configure
+block.
 
 ```groovy
-hg('http://scm') { node ->
-    node / clean('true')
+// checkout feature_branch1
+job('example-1') {
+    scm {
+        hg('http://scm', 'feature_branch1')
+    }
+}
+
+// clean checkout module1 from feature_branch1
+job('example-2') {
+    scm {
+        hg('http://scm') {
+            branch('feature_branch1')
+            modules('module1')
+            clean(true)
+        }
+    }
 }
 ```
 
 ### Git
+
 ```groovy
-git {
-    // since 1.20
-    remote { // can be repeated to add multiple remotes
-        name(String name) // optional
-        url(String url) // use either url or github
-        github(String ownerAndProject, String protocol = "https", String host = "github.com") // will also set the browser
-                                                                                              // and GitHub property
-        refspec(String refspec) // optional
-        credentials(String credentialsId) // optional
+job {
+    scm {
+        git {
+            // since 1.20
+            remote { // can be repeated to add multiple remotes
+                name(String name) // optional
+                url(String url) // use either url or github
+                github(String ownerAndProject, String protocol = 'https',
+                       String host = 'github.com')
+                refspec(String refspec) // optional
+                credentials(String credentialsId) // optional
+            }
+            branch(String name) // calls are accumulated, defaults to '**'
+            branches(String... names)
+            mergeOptions(String remote = null, String branch)
+            createTag(boolean createTag = true) // defaults to false
+            clean(boolean clean = true) // defaults to false
+            wipeOutWorkspace(boolean wipeOut = true) // defaults to false
+            remotePoll(boolean remotePoll = true) // defaults to false
+            shallowClone(boolean shallowClone = true) // defaults to false
+            recursiveSubmodules(boolean recursive = true) // since 1.33
+            pruneBranches(boolean pruneBranches = true) // defaults to false
+            localBranch(String branch) // check out to specific local branch
+            relativeTargetDir(String directory)
+            reference(String reference) // path to a reference repository
+            cloneTimeout(int timeout) // since 1.28, timeout in minutes
+            ignoreNotifyCommit(boolean value = true) // since 1.33
+            browser { // since 1.26
+                stash(String url) // URL to the Stash repository, optional
+            }
+            strategy { // since 1.30
+                inverse()
+                ancestry(int maxAgeInDays, String commit)
+                gerritTrigger()
+            }
+
+            configure(Closure configure) // optional configure block
+        }
+
+        git(String url, String branch = null, Closure configure = null)
+
+        github(String ownerAndProject, String branch = null,
+               String protocol = 'https', String host = 'github.com',
+               Closure configure = null)
     }
-    branch(String name) // the branches to build, multiple calls are accumulated, defaults to **
-    branches(String... names)
-    mergeOptions(String remote = null, String branch) // merge a branch before building, optional
-    createTag(boolean createTag = true) // create a tag for every build, optional, defaults to false
-    clean(boolean clean = true) // clean after checkout, optional, defaults to false
-    wipeOutWorkspace(boolean wipeOutWorkspace = true) // wipe out workspace and force clone, optional, defaults to false
-    remotePoll(boolean remotePoll = true) // force polling using workspace, optional, defaults to false
-    shallowClone(boolean shallowClone = true) // perform shallow clone, optional, defaults to false
-    pruneBranches(boolean pruneBranches = true) // prune obsolete local branches, optional, defaults to false
-    localBranch(String branch) // check out to specific local branch
-    relativeTargetDir(String relativeTargetDir) // checkout to a sub-directory, optional
-    reference(String reference) // path to a reference repository, optional
-    cloneTimeout(int timeout) // since 1.28, timeout (in minutes) for clone and fetch operations
-    browser { // since 1.26
-        stash(String url) // URL to the Stash repository, optional
-    }
-    strategy { // since 1.30
-        inverse()
-        ancestry(int maxAgeInDays, String commit)
-        gerritTrigger()
-    }
-    configure(Closure configure) // optional configure block, the GitSCM node is passed in
 }
-
-git(String url, String branch = null, Closure configure = null)
-
-github(String ownerAndProject, String branch = null, String protocol = 'https',
-       String host = 'github.com', Closure configure = null)
 ```
 
-Adds a Git SCM source. The first variant can be used for advanced configuration (since 1.20), the other two variants are shortcuts for simpler Git SCM configurations.
+Adds a Git SCM source. The first variant can be used for advanced configuration (since 1.20), the other two variants are
+shortcuts for simpler Git SCM configurations. Requires the
+[Git Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin).
 
-The GitHub variants will derive the Git URL from the ownerAndProject, protocol and host parameters. Valid protocols are `https`, `ssh` and `git`. They also configure the source browser to point to GitHub.
+The closure parameter of the shortcut variants expects a [[configure block|The-Configure-Block]] closure.
 
-The Git plugin has a lot of configurable options, which are currently not all supported by the DSL. A  configure block can be used to add more options.
+The `github` methods will derive the Git URL from the `ownerAndProject`, `protocol` and `host` parameters. Valid
+protocols are `'https'`, `'ssh'` and `'git'`. They also configure the source browser to point to GitHub and set the
+GitHub project URL.
+
+The Git plugin has a lot of configurable options, which are currently not all supported by the DSL. A
+[[configure block|The-Configure-Block]] can be used to add more options. The `GitSCM` node is passed into the configure
+block.
 
 Version 2.0 or later of the Git Plugin is required to use `cloneTimeout` or Jenkins managed credentials for Git
 authentication. The argument for the `credentials` method can either be the ID of the credentials or its description.
@@ -953,55 +1093,66 @@ Note that finding credentials by description has been [[deprecated|Deprecation-P
 
 When Git Plugin version 2.0 or later is used, `mergeOptions` can be called multiple times to merge more than one branch.
 
-Examples:
-
 ```groovy
 // checkout repo1 to a sub directory and clean the workspace after checkout
-git {
-    remote {
-        name('remoteB')
-        url('git@server:account/repo1.git')
+job('example-1') {
+    scm {
+        git {
+            remote {
+                name('remoteB')
+                url('git@server:account/repo1.git')
+            }
+            clean()
+            relativeTargetDir('repo1')
+        }
     }
-    clean()
-    relativeTargetDir('repo1')
 }
-```
 
-```groovy
-// add the upstream repo as second remote and merge branch featureA with master
-git {
-    remote {
-        name('origin')
-        url('git@serverA:account/repo1.git')
+// add the upstream repository as second remote and
+// merge branch featureA with master
+job('example-2') {
+    scm {
+        git {
+            remote {
+                name('origin')
+                url('git@serverA:account/repo1.git')
+            }
+            remote {
+                name('upstream')
+                url('git@serverB:account/repo1.git')
+            }
+            branch('featureA')
+            mergeOptions('upstream', 'master')
+        }
     }
-    remote {
-        name('upstream')
-        url('git@serverB:account/repo1.git')
-    }
-    branch('featureA')
-    mergeOptions('upstream', 'master')
 }
-```
 
-```groovy
 // add user name and email options
-git('git@git') { node -> // is hudson.plugins.git.GitSCM
-    node / gitConfigName('DSL User')
-    node / gitConfigEmail('me@me.com')
+job('example-3') {
+    scm {
+        git('git@git') { node -> // is hudson.plugins.git.GitSCM
+            node / gitConfigName('DSL User')
+            node / gitConfigEmail('me@me.com')
+        }
+    }
 }
-```
 
-```groovy
-// add a Git SCM for the GitHub repository job-dsl-plugin of GitHub user jenkinsci
-github('jenkinsci/job-dsl-plugin')
-```
+// add Git SCM for GitHub repository job-dsl-plugin of GitHub user jenkinsci
+job('example-4') {
+    scm {
+        github('jenkinsci/job-dsl-plugin')
+    }
+}
 
-```groovy
-// add a Git SCM for a GitHub repository and use the given credentials for authentication
-git {
-    remote {
-        github('account/repo', 'ssh')
-        credentials('github-ci-key')
+// add Git SCM for a GitHub repository with authentication
+job('example-5') {
+    scm {
+        git {
+            remote {
+                github('account/repo', 'ssh')
+                credentials('github-ci-key')
+            }
+        }
     }
 }
 ```
@@ -1273,11 +1424,34 @@ cron(String cronString)
 Triggers job based on regular intervals.
 
 ### Source Control Trigger
+
 ```groovy
-scm(String cronString)
+job {
+    triggers {
+        scm(String cronString) {
+            ignorePostCommitHooks(boolean ignorePostCommitHooks = true) // since 1.31
+        }
+    }
+}
 ```
 
 Polls source control for changes at regular intervals.
+
+```groovy
+job {
+    triggers {
+        scm('@daily')
+    }
+}
+
+job {
+    triggers {
+        scm('@midnight') {
+            ignorePostCommitHooks()
+        }
+    }
+}
+```
 
 ### Github Push Notification Trigger
 ```groovy
@@ -1335,23 +1509,29 @@ gerrit {
 ### Github Pull Request Trigger
 
 ```groovy
-pullRequest {
-    admin(String admin) // add admin
-    admins(Iterable<String> admins) // add admins
-    userWhitelist(String user) // add user to whitelist
-    userWhitelist(Iterable<String> users) // add users to whitelist
-    orgWhitelist(String organization) // add organization to whitelist
-    orgWhitelist(Iterable<String> organizations) // add organizations to whitelist
-    cron(String cron) // set cron schedule, defaults to 'H/5 * * * *'
-    triggerPhrase(String triggerPhrase) // set phrase to trigger by commenting within the pull request
-    onlyTriggerPhrase(boolean onlyTriggerPhrase = true) // defaults to false if not specified
-    useGitHubHooks(boolean useGithubHooks = true) // defaults to false if not specified
-    permitAll(boolean permitAll = true) // defaults to false if not specified
-    autoCloseFailedPullRequests(boolean autoCloseFailedPullRequests = true) // defaults to false if not specified
+job('example') {
+    triggers {
+        pullRequest {
+            admin(String admin)
+            admins(Iterable<String> admins)
+            userWhitelist(String user)
+            userWhitelist(Iterable<String> users)
+            orgWhitelist(String organization)
+            orgWhitelist(Iterable<String> organizations)
+            cron(String cron)                                 // defaults to 'H/5 * * * *'
+            triggerPhrase(String triggerPhrase)
+            onlyTriggerPhrase(boolean value = true)            // defaults to false
+            useGitHubHooks(boolean useGithubHooks = true)     // defaults to false
+            permitAll(boolean permitAll = true)               // defaults to false
+            autoCloseFailedPullRequests(boolean value = true) // defaults to false
+            commentFilePath(String commentFilePath)           // since 1.31
+        }
+    }
 }
 ```
 
-Builds pull requests from GitHub and will report the results directly to the pull request. Requires the [GitHub pull request builder plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin). (Available since 1.22)
+Builds pull requests from GitHub and will report the results directly to the pull request. Requires the
+[GitHub pull request builder plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin).
 
 The pull request builder plugin requires a special Git SCM configuration, see the plugin documentation for details.
 
@@ -1368,9 +1548,9 @@ job('example') {
     }
     triggers {
         pullRequest {
-            admins('USER_ID')
+            admin('USER_ID')
             userWhitelist('you@you.com')
-            orgWhitelist('your_github_org', 'another_org')
+            orgWhitelist(['your_github_org', 'another_org'])
             cron('H/5 * * * *')
             triggerPhrase('Ok to test')
             onlyTriggerPhrase()
@@ -1381,6 +1561,8 @@ job('example') {
     }
 }
 ```
+
+(since 1.22)
 
 ### URL Trigger
 
@@ -1458,6 +1640,64 @@ snapshotDependencies(boolean checkSnapshotDependencies)
 ```
 
 When enabling the snapshot dependencies trigger, Jenkins will check the snapshot dependencies from the  '\<dependency\>', '\<plugin\>' and '\<extension\>' elements used in Maven POMs and setup a job relationship to the jobs building the snapshots. This can only be used in jobs with type 'maven'.
+
+### Upstream
+
+```groovy
+job {
+    triggers {
+        upstream(String project, String threshold = 'SUCCESS')
+    }
+}
+```
+
+Starts a build on completion of an upstream job, i.e. adds the "Build after other projects are built" trigger. Requires
+Jenkins 1.560 or later.
+
+Possible values for `threshold` are `'SUCCESS'`, `'UNSTABLE'` or `'FAILURE'`.
+
+```groovy
+job('example') {
+    triggers {
+        upstream('other', 'UNSTABLE')
+    }
+}
+```
+
+(since 1.33)
+
+### Rundeck
+
+```groovy
+job {
+    triggers {
+        rundeck {
+            jobIdentifiers(String... jobIdentifiers)
+            executionStatuses(String... executionStatuses)
+        }
+    }
+}
+```
+
+Allows to schedule a build on Jenkins after a job execution on RunDeck. Requires the
+[RunDeck Plugin](https://wiki.jenkins-ci.org/display/JENKINS/RunDeck+Plugin).
+
+Possible values for `executionStatuses` are `'SUCCEEDED'`, `'FAILED'` and `'ABORTED'`. Both `jobIdentifiers` and
+`executionStatuses` are empty by default.
+
+```groovy
+job('example') {
+    triggers {
+        rundeck {
+            jobIdentifiers('2027ce89-7924-4ecf-a963-30090ada834f',
+                           'my-project-name:main-group/sub-group/my-job')
+            executionStatuses('FAILED', 'ABORTED')
+        }
+    }
+}
+```
+
+(since 1.33)
 
 # Build Environment (Build Wrappers)
 
@@ -1664,6 +1904,38 @@ job('example') {
 
 (Since 1.19)
 
+### Xvfb
+
+```groovy
+job {
+    wrappers {
+        xvfb(String xvfbInstallation) {
+            screen(String screen)                               // defaults to 1024x768x24
+            debug(boolean debug = true)                         // defaults to false
+            timeout(int timeout)                                // defaults to 0
+            displayNameOffset(int displayNameOffset)            // defaults to 1
+            shutdownWithBuild(boolean shutdownWithBuild = true) // defaults to false
+            autoDisplayName(boolean autoDisplayName = true)     // defaults to false
+            assignedLabels(String labels)
+            parallelBuild(boolean parallelBuild = true)         // defaults to false
+        }
+    }
+}
+```
+
+Controls the Xvfb virtual frame buffer X11 server. Requires the
+[Xvfb Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Xvfb+Plugin).
+
+```groovy
+job {
+    wrappers {
+        xvfb('default') {
+            screen('1920x1080x24')
+        }
+    }
+}
+```
+
 ### Xvnc
 
 ```groovy
@@ -1716,10 +1988,14 @@ Downloads the specified tools, if needed, and puts the path to each of them in t
 job {
     wrappers {
         configFiles {
-            file(String fileName) {                   // can be called multiple times
-                targetLocation(String targetLocation) // optional
-                variable(String variable)             // optional
+            file(String fileName) {
+                targetLocation(String targetLocation)       // optional
+                variable(String variable)                   // optional
             }
+            custom(String fileName,
+                   Closure configFileClosure = null)        // since 1.35
+            mavenSettings(String fileName,
+                          Closure configFileClosure = null) // since 1.35
         }
     }
 }
@@ -1728,12 +2004,17 @@ job {
 Makes an existing custom config file available to builds. Requires
 the [Config File Provider Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Config+File+Provider+Plugin).
 
+`file` is an alias for `custom`.
+
 ```groovy
 job('example') {
     wrappers {
         configFiles {
             file('myCustomConfigFile') {
                 variable('CONFIG_FILE')
+            }
+            mavenSettings('myJenkinsSettingsFile') {
+                targetLocation('settings.xml')
             }
         }
     }
@@ -1851,6 +2132,39 @@ job('example') {
 ```
 
 (since 1.22)
+
+### Pre SCM Build Steps
+
+```groovy
+job {
+    wrappers {
+        preScmSteps {
+            steps(Closure stepClosure)
+            failOnError(boolean failOnError = true) // defaults to false
+        }
+    }
+}
+```
+
+Allows build steps to run before SCM checkout. Requires the
+[Pre-SCM Build Step Plugin](https://wiki.jenkins-ci.org/display/JENKINS/pre-scm-buildstep).
+
+See [Build Steps](#build-steps) for available steps in the `stepClosure`.
+
+```groovy
+job {
+    wrappers {
+        preScmSteps {
+            steps {
+                shell('echo Hello World')
+            }
+            failOnError()
+        }
+    }
+}
+```
+
+(since 1.31)
 
 ### Log File Size Checker Plugin
 
@@ -1987,8 +2301,8 @@ job('example') {
 
 ### Maven Release
 
-```groovy {
-job(type: Maven) {
+```groovy
+mavenJob {
     wrappers {
         mavenRelease {
             scmUserEnvVar(String scmUserEnvVar) // empty by default
@@ -2011,7 +2325,7 @@ the [M2 Release Plugin](https://wiki.jenkins-ci.org/display/JENKINS/M2+Release+P
 Example:
 
 ```groovy
-job('example', type: Maven) {
+mavenJob('example') {
     wrappers {
         mavenRelease {
             scmUserEnvVar('MY_USER_ENV')
@@ -2105,6 +2419,28 @@ job('example') {
 
 (since 1.27)
 
+### NodeJS Command
+
+```groovy
+job {
+    steps {
+        nodejsCommand(String command, String nodeVersion)
+    }
+}
+```
+
+Executes a NodeJS script. Requires the [NodeJS Plugin](https://wiki.jenkins-ci.org/display/JENKINS/NodeJS+Plugin).
+
+```groovy
+job {
+    steps {
+        nodejsCommand('console.log("Hello World!")', 'Node 0.12.0')
+    }
+}
+```
+
+(since 1.31)
+
 ### Golang
 
 ```groovy
@@ -2172,6 +2508,8 @@ job {
             file(String variable, String credentialsId)
             string(String variable, String credentialsId)
             usernamePassword(String variable, String credentialsId)
+            usernamePassword(String usernameVariable,
+                             String passwordVariable, String credentialsId) // since 1.31
             zipFile(String variable, String credentialsId)
         }
     }
@@ -2243,6 +2581,27 @@ batchFile(String commandStr)
 
 Supports running a Windows batch file as a build step.
 
+### Build Description
+
+```groovy
+job {
+    steps {
+        buildDescription(String regexp, String description = null)
+    }
+}
+```
+
+Set build description based upon a regular expression test of the log file.
+Requires the [Description Setter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Description+Setter+Plugin)
+
+```groovy
+job('example') {
+    steps {
+        buildDescription(/.*\[INFO\] Uploading project information for [^\s]* ([^\s]*)/)
+    }
+}
+```
+
 ### Gradle
 
 ```groovy
@@ -2290,7 +2649,7 @@ maven {                                               // since 1.20; all methods
     goals(String goals)                               // the goals to run, multiple calls will be accumulated
     rootPOM(String fileName)                          // path to the POM
     mavenOpts(String options)                         // JVM options, multiple calls will be accumulated
-    localRepository(LocalRepositoryLocation location) // can be either LocalToWorkspace or LocalToExecutor (default)
+    localRepository(LocalRepositoryLocation location) // defaults to LocalRepositoryLocation.LOCAL_TO_EXECUTOR
     mavenInstallation(String name)                    // name of the Maven installation to use
     properties(Map properties)                        // since 1.21; add (system)-properties
     property(String key, String value)                // since 1.21; add a (system)-property
@@ -2302,6 +2661,10 @@ maven {                                               // since 1.20; all methods
 Runs Apache Maven. Configure block is handed `hudson.tasks.Maven`. The
 [Config File Provider Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Config+File+Provider+Plugin) is required to
 use `providedSettings`.
+
+Possible values for `localRepository` are `LocalRepositoryLocation.LOCAL_TO_WORKSPACE` and
+`LocalRepositoryLocation.LOCAL_TO_EXECUTOR`. The `LocalToWorkspace` and `LocalToExecutor` values are deprecated since
+1.31.
 
 Examples:
 
@@ -2383,6 +2746,29 @@ sbt(/*standard parameters here*/) {
 }
 ```
 
+### PowerShell
+
+```groovy
+job {
+    steps {
+        powerShell(String command)
+    }
+}
+```
+
+Supports running a Windows PowerShell command as a build step. Requires the
+[PowerShell Plugin](https://wiki.jenkins-ci.org/display/JENKINS/PowerShell+Plugin).
+
+```groovy
+job('example') {
+    steps {
+        powerShell('New-Item C:\\test')
+    }
+}
+```
+
+(since 1.32)
+
 ### Publish Over SSH
 
 ```groovy
@@ -2407,7 +2793,7 @@ job {
                     noDefaultExcludes(boolean noDefaultExcludes = true)
                     makeEmptyDirs(boolean makeEmptyDirs = true)
                     flattenFiles(boolean flattenFiles = true)
-                    remoteDirIsDateFormat(boolean remoteDirIsDateFormat = true)
+                    remoteDirIsDateFormat(boolean value = true)
                     execTimeout(long execTimeout)
                     execInPty(boolean execInPty = true)
                 }
@@ -2417,6 +2803,9 @@ job {
             alwaysPublishFromMaster(boolean alwaysPublishFromMaster = true)
             parameterizedPublishing(String parameterName)
         }
+    }
+    publishers {
+        publishOverSsh(Closure publishOverSshClosure) // since 1.34
     }
 }
 ```
@@ -2429,8 +2818,8 @@ Encrypted keys are currently not supported on job level, use the global configur
 Examples:
 
 ```groovy
-// Basic step
-job('example') {
+// basic step
+job('example-1') {
     steps {
         publishOverSsh {
             server('server-name') {
@@ -2442,9 +2831,9 @@ job('example') {
     }
 }
 
-// Using parameter to match server label
-job('example') {
-    steps {
+// post-build step, using parameter to match server label
+job('example-2') {
+    publishers {
         publishOverSsh {
             server('my-server-01') {
                 credentials('user01') {
@@ -2523,20 +2912,28 @@ job('example') {
 ```groovy
 job {
     steps {
-        dsl(String scriptText, String removedJobAction = null, boolean ignoreExisting = false)
-        dsl(Iterable<String> externalScripts, String removedJobAction = null, boolean ignoreExisting = false)
+        dsl(String scriptText, String removedJobAction = null,
+            boolean ignoreExisting = false)
+        dsl(Iterable<String> externalScripts, String removedJobAction = null,
+            boolean ignoreExisting = false)
         dsl {
-            removeAction(String removeAction)             // one of: 'DISABLE', 'IGNORE', 'DELETE'
-            external(String... dslFileNames)              // file names of Job DSL scripts in the workspace
-            external(Iterable<String> dslFileNames)       // file names of Job DSL scripts in the workspace
-            text(String dslSpecification)                 // direct specification of Job DSL scripts as string
-            ignoreExisting(boolean ignoreExisting = true) // flag if to ignore existing jobs
+            removeAction(String removeAction)
+            removeViewAction(String removeViewAction)     // since 1.35
+            external(String... dslFileNames)
+            external(Iterable<String> dslFileNames)
+            text(String dslSpecification)
+            ignoreExisting(boolean ignoreExisting = true) // false by default
             additionalClasspath(String classpath)         // since 1.29
+            lookupStrategy(String lookupStrategy)         // since 1.33
         }
     }
 }
 
 Allows the programmatic creation of jobs, folders and views using the Job DSL.
+
+Valid values for `removeAction` are `'IGNORE'` (default), `'DISABLE'` and `'DELETE'`. Valid values for
+`removeViewAction` are `'IGNORE'` (default) and `'DELETE'`. Valid values for `lookupStrategy` are `'JENKINS_ROOT'`
+(default) and `'SEED_JOB'`.
 
 ```groovy
 job('example-1') {
@@ -2572,19 +2969,59 @@ job('example-3') {
 ### Copy Artifacts
 
 ```groovy
-copyArtifacts(String jobName, String includeGlob, String targetPath = '', boolean flattenFiles = false, boolean optionalAllowed = false, Closure copyArtifactClosure) {
-    upstreamBuild(boolean fallback = false) // Upstream build that triggered this job
-    latestSuccessful(boolean stable = false) // Latest successful build
-    latestSaved() // Latest saved build (marked "keep forever")
-    permalink(String linkName) // Specified by permalink: lastBuild, lastStableBuild
-    buildNumber(int buildNumber) // Specific Build
-    buildNumber(String buildNumber) // Specific Build
-    workspace() // Copy from WORKSPACE of latest completed build
-    buildParameter(String parameterName) // Specified by build parameter
+job {
+    steps {
+        copyArtifacts(String jobName) { // since 1.33
+            includePatterns(String... includes)
+            excludePatterns(String... excludes)
+            targetDirectory(String targetDirectory)
+            flatten(boolean flatten = true)
+            optional(boolean optional = true)
+            fingerprintArtifacts(boolean fingerprint = true)
+            buildSelector {
+                upstreamBuild(boolean fallback = false)
+                latestSuccessful(boolean stable = false) // default
+                latestSaved()
+                permalink(String linkName)
+                buildNumber(int buildNumber)
+                buildNumber(String buildNumber)
+                workspace()
+                buildParameter(String parameterName)
+            }
+        }
+        copyArtifacts(String jobName, String includeGlob,
+                      Closure buildSelectorClosure)      // deprecated since 1.33
+        copyArtifacts(String jobName, String includeGlob, String targetPath,
+                      Closure buildSelectorClosure)      // deprecated since 1.33
+        copyArtifacts(String jobName, String includeGlob, String targetPath = '',
+                      boolean flattenFiles,
+                      Closure buildSelectorClosure)      // deprecated since 1.33
+        copyArtifacts(String jobName, String includeGlob, String targetPath = '',
+                      boolean flattenFiles, boolean optionalAllowed,
+                      Closure buildSelectorClosure)      // deprecated since 1.33
+    }
 }
 ```
 
-Supports the version 1.26 or later of the [Copy Artifact Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Copy+Artifact+Plugin). As per the plugin, the input glob is for files in the workspace. The methods in the closure are considered the selectors, of which only one can be used.
+A build step to copy artifacts from another project. Requires version 1.26 or later of the
+[Copy Artifact Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Copy+Artifact+Plugin).
+
+```groovy
+job('example') {
+    steps {
+        copyArtifacts('upstream') {
+            includePatterns('*.xml', '*.properties')
+            excludePatterns('test.xml', 'test.properties')
+            targetDirectory('files')
+            flatten()
+            optional()
+            buildSelector {
+                latestSuccessful(true)
+            }
+        }
+    }
+}
+```
 
 ### Groovy
 ```groovy
@@ -2744,7 +3181,7 @@ job('example') {
 # Multijob Phase
 
 ```
-job(type: Multijob) {
+multiJob {
     steps {
         phase(String name, String continuationConditionArg = 'SUCCESSFUL', Closure phaseClosure = null) {
             phaseName(String phaseName)
@@ -2781,7 +3218,7 @@ The `nodeLabel` parameter type requires the
 [NodeLabel Parameter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/NodeLabel+Parameter+Plugin).
 
 ```
-job('example', type: Multijob) {
+multiJob('example') {
     steps {
         phase() {
             phaseName 'Second'
@@ -2827,7 +3264,7 @@ See also [Building a matrix project](https://wiki.jenkins-ci.org/display/JENKINS
 ### Axes
 
 ```groovy
-job(type: Matrix) {
+matrixJob {
     axes {
         text(String name, String... values)
         text(String name, Iterable<String> values)
@@ -2851,7 +3288,7 @@ passed into the configure block.
 Example:
 
 ```groovy
-job('example', type: Matrix) {
+matrixJob('example') {
     axes {
         label('label', 'linux', 'windows')
         jdk('jdk6', 'jdk7')
@@ -2865,7 +3302,7 @@ job('example', type: Matrix) {
 ### Run Sequentially
 
 ```groovy
-job(type: Matrix) {
+matrixJob {
     runSequentially(boolean runSequentially = true)
 }
 ```
@@ -2875,7 +3312,7 @@ Run each matrix combination in sequence. If omitted, Jenkins will try to build t
 Example:
 
 ```groovy
-job('example', type: Matrix) {
+matrixJob('example') {
     sequential()
 }
 ```
@@ -2883,7 +3320,7 @@ job('example', type: Matrix) {
 ### Touchstone Builds
 
 ```groovy
-job(type: Matrix) {
+matrixJob(type) {
     touchStoneFilter(String expression, boolean continueOnFailure = false)
 }
 ```
@@ -2893,7 +3330,7 @@ An expression of which combination to run first, the second parameter controls i
 Example:
 
 ```groovy
-job('example', type: Matrix) {
+matrixJob('example') {
     touchStoneFilter('label=="linux"')
 }
 ```
@@ -2901,7 +3338,7 @@ job('example', type: Matrix) {
 ### Combination Filter
 
 ```groovy
-job(type: Matrix) {
+matrixJob(type) {
     combinationFilter(String expression)
 }
 ```
@@ -2911,7 +3348,7 @@ An expression to limit which combinations can be run.
 Example:
 
 ```groovy
-job('example', type: Matrix) {
+matrixJob('example') {
     combinationFilter('jdk=="jdk-6" || label=="linux"')
 }
 ```
@@ -2934,68 +3371,119 @@ When a job is checked the following conditions must be validated before the job 
 
 (Since 1.19)
 
-# [Parameterized Trigger as Build Step](https://wiki.jenkins-ci.org/display/JENKINS/Parameterized+Trigger+Plugin)
+# Debian Package Builder
 
 ```groovy
-downstreamParameterized(Closure downstreamClosure) {
-    trigger(String projects, String condition = 'SUCCESS', boolean triggerWithNoParameters = false, Map<String, String> blockingThresholds = [:], Closure downstreamTriggerClosure = null) {
-        currentBuild() // Current build parameters
-        propertiesFile(String propFile) // Parameters from properties file
-        gitRevision(boolean combineQueuedCommits = false) // Pass-through Git commit that was built
-        predefinedProp(String key, String value) // Predefined properties
-        predefinedProps(Map<String, String> predefinedPropsMap)
-        predefinedProps(String predefinedProps) // Newline separated
-        matrixSubset(String groovyFilter) // Restrict matrix execution to a subset
-        subversionRevision() // Subversion Revision
-        sameNode() //Run the next job on the same node
-        nodeLabel(String paramName, String nodeLabel) // Limit to node label selection, since 1.26
+job {
+    step {
+        debianPackage(String path) {
+            signPackage(boolean sign = true) // defaults to true
+            generateChangelog(String nextVersion = null, boolean alwaysBuild = false)
+        }
     }
 }
 ```
 
-Supports <a href="https://wiki.jenkins-ci.org/display/JENKINS/Parameterized+Trigger+Plugin">the Parameterized Trigger plugin</a>. The plugin is configured by adding triggers
-to other projects, multiple triggers can be specified. The projects arg is a comma separated list of downstream projects. The condition arg is one of these
-possible values: SUCCESS, UNSTABLE, UNSTABLE_OR_BETTER, UNSTABLE_OR_WORSE, FAILED.  The methods inside the downstreamTriggerClosure are optional, though it
-makes the most sense to call at least one.  Each one is relatively self documenting, mapping directly to what is seen in the UI. The predefinedProp and
-predefinedProps methods are used to accumulate properties, meaning that they can be called multiple times to build a superset of properties.
+Requires the [Debian Package Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Debian+Package+Builder+Plugin).
 
-In addition to the above (which is common to both the build step and publisher use cases of the Parameterized Trigger plugin), there is the blockingThresholds map argument to the trigger. This is optional, and if given, the build will block until the child build has completed. Then the build status will be updated depending on the blockingThresholds, which are the following:
+The `path` parameter refers to a path in the workspace where the 'debian' catalog is stored. The plugin will
+automatically install packages required to build Debian packages.
 
-* buildStepFailure
-* failure
-* unstable
+```groovy
+job {
+    step {
+        debianPackage('module') {
+            generateChangelog()
+        }
+    }
+}
+```
 
-These can each be set to any of the allowed build statuses ('SUCCESS', 'UNSTABLE', or 'FAILURE'). The parent build's status will be set to failure (or unstable, if that's configured) if the child build's status is equal to or worse than the configured status, while the buildStepFailure threshold allows you to set the parent build's status but continue to further steps as if it hadn't failed.
+(since 1.31)
+
+# Parameterized Trigger
+
+```groovy
+job {
+    steps {
+        downstreamParameterized { // since 1.20
+            trigger(String projects, String condition,
+                    boolean triggerWithNoParameters,
+                    Map<String, String> blockingThresholds) {
+                currentBuild()
+                propertiesFile(String file, boolean failOnMissing = false)
+                gitRevision(boolean combineQueuedCommits = false)
+                predefinedProp(String key, String value)
+                predefinedProps(Map<String, String> predefinedPropsMap)
+                predefinedProps(String predefinedProps) // newline separated
+                matrixSubset(String groovyFilter)
+                subversionRevision(boolean includeUpstreamParameters = false)
+                sameNode()
+                nodeLabel(String paramName, String nodeLabel) // since 1.26
+            }
+            trigger(String projects, Closure downstreamTriggerClosure = null)
+            trigger(String projects, String condition,
+                    Closure downstreamTriggerClosure = null)
+            trigger(String projects, String condition,
+                    boolean triggerWithNoParameters,
+                    Closure downstreamTriggerClosure = null)
+        }
+    }
+    publishers {
+        downstreamParameterized(Closure downstreamClosure)
+    }
+}
+```
+
+Allows to trigger new parameterized builds. Requires the
+[Parameterized Trigger Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Parameterized+Trigger+Plugin).
+
+Multiple triggers can be specified by calling `trigger` multiple times.
+
+The `projects` argument is a comma separated list of downstream projects.
+
+The `condition` argument must be one of these values: `'SUCCESS'` (default), `'UNSTABLE'`, `'UNSTABLE_OR_BETTER'`,
+`'UNSTABLE_OR_WORSE'`, `'FAILED'` or `'ALWAYS'`. The argument is ignored when configuring a build step, but should be
+set to `'ALWAYS'`.
+
+The `predefinedProp` and `predefinedProps` methods are used to accumulate properties, meaning that they can be called
+multiple times to build a superset of properties.
+
+The `blockingThresholds` argument can only be used when configuring a build step. Valid keys for the map are
+`buildStepFailure`, `failure` and `unstable`. The values can be set to either `'SUCCESS'`, `'UNSTABLE'`  or `'FAILURE'`.
 
 The `nodeLabel` parameter type requires the
 [NodeLabel Parameter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/NodeLabel+Parameter+Plugin).
 
-Examples:
 ```groovy
-steps {
-    downstreamParameterized {
-        trigger('Project1, Project2', 'UNSTABLE_OR_BETTER', true,
-                    ["buildStepFailure": "FAILURE",
-                            "failure": "FAILURE",
-                            "unstable": "UNSTABLE"]) {
-            currentBuild() // Current build parameters
-            propertiesFile('dir/my.properties') // Parameters from properties file
-            gitRevision(false) // Pass-through Git commit that was built
-            predefinedProp('key1', 'value1') // Predefined properties
-            predefinedProps([key2: 'value2', key3: 'value3'])
-            predefinedProps('key4=value4\nkey5=value5') // Newline separated
-            matrixSubset('label=="${TARGET}"') // Restrict matrix execution to a subset
-            subversionRevision() // Subversion Revision
-            nodeLabel('label', 'linux') // Limit to node label selection
+job('example-1') {
+    steps {
+        downstreamParameterized {
+            trigger('Project1, Project2', 'ALWAYS', true,
+                    [buildStepFailure: 'FAILURE',
+                     failure         : 'FAILURE',
+                     unstable        : 'UNSTABLE']) {
+                predefinedProp('key1', 'value1')
+                predefinedProps([key2: 'value2', key3: 'value3'])
+                predefinedProps('key4=value4\nkey5=value5')
+            }
+            trigger('Project2') {
+                currentBuild()
+            }
         }
-        trigger('Project2') {
-            currentBuild()
+    }
+}
+
+job('example-2') {
+    publishers {
+        downstreamParameterized {
+            trigger('Project1, Project2', 'UNSTABLE_OR_BETTER') {
+                currentBuild()
+            }
         }
     }
 }
 ```
-
-(since 1.20)
 
 ### [Conditional BuildStep Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin)
 
@@ -3038,7 +3526,7 @@ steps {
             stringsMatch('${SOME_PARAMETER}', 'pants', false)
         }
         runner("Fail")
-        shell("echo 'just one step')
+        shell("echo 'just one step'")
     }
 }
 ```
@@ -3050,7 +3538,7 @@ steps {
             time(9, 0, 13, 0, false)
         }
         runner("Unstable")
-        shell("echo 'a first step')
+        shell("echo 'a first step'")
         ant('build') {
             target 'test'
         }
@@ -3071,7 +3559,7 @@ steps {
             }
         }
         runner("Unstable")
-        shell("echo 'a first step')
+        shell("echo 'a first step'")
         ant('build') {
             target 'test'
         }
@@ -3267,13 +3755,27 @@ publishers {
 ```groovy
 job {
     publishers {
-        archiveArtifacts(String glob, String excludeGlob = null, Boolean latestOnlyBoolean = false)
+        archiveArtifacts(String glob, String excludeGlob = null)
         archiveArtifacts { // since 1.20
             pattern(String pattern) // can be called multiple since 1.27
             exclude(String excludePattern)
-            latestOnly(Boolean latestOnly = true) // defaults to false if not called
-            allowEmpty(Boolean allowEmpty = true) // defaults to false if not called
+            allowEmpty(boolean allowEmpty = true) // defaults to false
+
+            // since 1.33, defaults to true, requires Jenkins 1.575
+            defaultExcludes(boolean defaultExcludes = true)
+
+            // since 1.33, defaults to false, requires Jenkins 1.571
+            fingerprint(boolean fingerprint = true)
+
+            // since 1.33, defaults to false, requires Jenkins 1.567
+            onlyIfSuccessful(boolean onlyIfSuccessful = true)
+
+            // deprecated since 1.33, defaults to false
+            latestOnly(boolean latestOnly = true)
         }
+
+        // deprecated since 1.33
+        archiveArtifacts(String glob, String excludeGlob, boolean latestOnly)
     }
 }
 ```
@@ -3294,7 +3796,7 @@ job('example-2') {
         archiveArtifacts {
             pattern('build/test-output/**/*.html')
             pattern('build/test-output/**/*.xml')
-            latestOnly()
+            onlyIfSuccessful()
         }
     }
 }
@@ -3397,27 +3899,72 @@ job('example') {
 }
 ```
 
+### HipChat Publisher
+
+```groovy
+job {
+    publishers {
+        hipChat {
+            rooms(String... rooms)      // uses global settings if omitted
+            token(String token)         // uses global settings if omitted
+            notifyBuildStart(boolean notify = true)   // defaults to false
+            notifySuccess(boolean notify = true)      // defaults to false
+            notifyAborted(boolean notify = true)      // defaults to false
+            notifyNotBuilt(boolean notify = true)     // defaults to false
+            notifyUnstable(boolean notify = true)     // defaults to false
+            notifyFailure(boolean notify = true)      // defaults to false
+            notifyBackToNormal(boolean notify = true) // defaults to false
+            startJobMessage(String message)     // uses default if omitted
+            completeJobMessage(String message)  // uses default if omitted
+        }
+    }
+}
+```
+
+Allows notifications to be set to HipChat. Requires the
+[HipChat Plugin](https://wiki.jenkins-ci.org/display/JENKINS/HipChat+Plugin).
+
+```groovy
+job('example') {
+    publishers {
+        hipChat {
+            rooms('Dev Team A', 'QA')
+            notifyAborted()
+            notifyNotBuilt()
+            notifyUnstable()
+            notifyFailure()
+            notifyBackToNormal()
+        }
+    }
+}
+```
+
+(since 1.33)
+
 ### HTML Publisher
 
 ```groovy
 job {
     publishers {
         publishHtml {
-            report(String reportDir) {                    // since 1.28
+            report(String reportDir) {                          // since 1.28
                 reportName(String reportName)
-                reportFiles(String reportFiles)           // defaults to 'index.html' if omitted
-                allowMissing(boolean allowMissing = true) // defaults to false if omitted
-                keepAll(boolean keepAll = true)           // defaults to false if omitted
+                reportFiles(String reportFiles)   // defaults to 'index.html'
+                allowMissing(boolean allow = true)       // defaults to false
+                keepAll(boolean keepAll = true)          // defaults to false
+                alwaysLinkToLastBuild(boolean value = true)     // since 1.35
             }
-            report(String reportDir, String reportName, String reportFiles = 'index.html',
+            report(String reportDir, String reportName,
+                   String reportFiles = 'index.html',
                    Boolean keepAll = false) // deprecated since 1.28
-            report(Map args) // deprecated since 1.28, same names as the method above
+            report(Map args) // deprecated since 1.28
         }
     }
 }
 ```
 
-Allows HTML reports to be archived. The report method can be called multiple times to add more reports.
+Allows HTML reports to be archived. The report method can be called multiple times to add more reports. Requires the
+[HTML Publisher Plugin](https://wiki.jenkins-ci.org/display/JENKINS/HTML+Publisher+Plugin).
 
 ```groovy
 job('example') {
@@ -3430,6 +3977,7 @@ job('example') {
                 reportName('Gradle Tests')
                 keepAll()
                 allowMissing()
+                alwaysLinkToLastBuild()
             }
         }
     }
@@ -3503,6 +4051,39 @@ job('example') {
 }
 ```
 
+### Build Publisher
+
+```groovy
+job {
+    publishers {
+        publishBuild {
+            publishUnstable(boolean publishUnstable = true)
+            publishFailed(boolean publishFailed = true)
+            discardOldBuilds(int daysToKeep = -1, int numToKeep = -1,
+                             int artifactDaysToKeep = -1,
+                             int artifactNumToKeep = -1)
+        }
+    }
+}
+```
+
+Allows to publish records from one Jenkins to another. Requires the
+[Build Publisher Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Publisher+Plugin).
+
+The `publishUnstable` and `publishFailed` options are enabled by default.
+
+```groovy
+job('example') {
+    publishers {
+        publishBuild {
+            discardOldBuilds(7, 10)
+        }
+    }
+}
+```
+
+(since 1.33)
+
 ### CloneWorkspace Publisher
 ```groovy
 publishCloneWorkspace(String workspaceGlob, String workspaceExcludeGlob = '', String criteria = 'Any', String archiveMethod = 'TAR', boolean overrideDefaultExcludes = false, Closure cloneWorkspaceClosure = null) {}
@@ -3518,54 +4099,6 @@ downstream(String projectName, String thresholdName = 'SUCCESS')
 ```
 
 Specifies a downstream job. The second arg, thresholdName, can be one of three values: 'SUCCESS', 'UNSTABLE' or 'FAILURE'.
-
-### Extended Downstream
-```groovy
-downstreamParameterized(Closure downstreamClosure) {
-    trigger(String projects, String condition = 'SUCCESS', boolean triggerWithNoParameters = false, Closure downstreamTriggerClosure = null) {
-        currentBuild() // Current build parameters
-        propertiesFile(String propFile) // Parameters from properties file
-        gitRevision(boolean combineQueuedCommits = false) // Pass-through Git commit that was built
-        predefinedProp(String key, String value) // Predefined properties
-        predefinedProps(Map<String, String> predefinedPropsMap)
-        predefinedProps(String predefinedProps) // Newline separated
-        matrixSubset(String groovyFilter) // Restrict matrix execution to a subset
-        subversionRevision() // Subversion Revision
-        nodeLabel(String paramName, String nodeLabel) // Limit to node label selection, since 1.26
-    }
-}
-```
-
-Supports <a href="https://wiki.jenkins-ci.org/display/JENKINS/Downstream-Ext+Plugin">Downstream-Ext plugin</a>. The plugin is configured by adding triggers
-to other projects, multiple triggers can be specified. The projects arg is a comma separated list of downstream projects. The condition arg is one of these
-possible values: SUCCESS, UNSTABLE, UNSTABLE_OR_BETTER, UNSTABLE_OR_WORSE, FAILED.  The methods inside the downstreamTriggerClosure are optional, though it
-makes the most sense to call at least one.  Each one is relatively self documenting, mapping directly to what is seen in the UI. The predefinedProp and
-predefinedProps methods are used to accumulate properties, meaning that they can be called multiple times to build a superset of properties.
-
-The `nodeLabel` parameter type requires the
-[NodeLabel Parameter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/NodeLabel+Parameter+Plugin).
-
-Examples:
-```groovy
-publishers {
-    downstreamParameterized {
-        trigger('Project1, Project2', 'UNSTABLE_OR_BETTER', true) {
-            currentBuild() // Current build parameters
-            propertiesFile('dir/my.properties') // Parameters from properties file
-            gitRevision(false) // Pass-through Git commit that was built
-            predefinedProp('key1', 'value1') // Predefined properties
-            predefinedProps([key2: 'value2', key3: 'value3'])
-            predefinedProps('key4=value4\nkey5=value5') // Newline separated
-            matrixSubset('label=="${TARGET}"') // Restrict matrix execution to a subset
-            subversionRevision() // Subversion Revision
-            nodeLabel('label', 'linux') // Limit to node label selection
-        }
-        trigger('Project2') {
-            currentBuild()
-        }
-    }
-}
-```
 
 ### Violations Plugin
 ```groovy
@@ -3760,6 +4293,118 @@ The arguments here are in order:
 * (String) the findbugs-files to parse
 * (boolean) use the findbugs rank for the priority, default to false
 
+#### Plot Build Data
+
+```groovy
+job {
+    publishers {
+        plotBuildData {
+            plot(String group, String dataStore) {
+                title(String title)
+                numberOfBuilds(int numberOfBuilds)
+                yAxis(String yAxis)
+                style(String style)                             // defaults to 'line'
+                useDescriptions(boolean useDescriptions = true) // defaults to false
+                excludeZero(boolean excludeZero = true)         // defaults to false
+                keepRecords(boolean keepRecords = true)         // defaults to false
+                logarithmic(boolean logarithmic = true)         // defaults to false
+                propertiesFile(String fileName) {
+                    label(String label)
+                }
+                csvFile(String fileName) {
+                    includeColumns(String... columnNames)
+                    excludeColumns(String... columnNames)
+                    includeColumns(int... columnIndexes)
+                    excludeColumns(int... columnIndexes)
+                    url(String url)
+                    showTable(boolean showTable = true)         // defaults to false
+                }
+                xmlFile(String fileName) {
+                    nodeType(String nodeType)                   // defaults to 'NODESET'
+                    url(String url)
+                    xpath(String xpath)
+                }
+            }
+        }
+    }
+}
+```
+
+Show a number of plots, each containing a single data series. Requires the
+[Plot Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Plot+Plugin).
+
+Plot plugin relies on a data store to hold the plot data, this is normally stored in a randomly named CSV file within
+the workspace root. To avoid conflicts this location needs to be set manually relative to the workspace using the
+`dataStore` parameter.
+
+The `style` option can be one of `'area'`, `'bar'`, `'bar3d'`, `'line'` (default), `'line3d'`, `'stackedArea'`,
+`'stackedbar'`, `'stackedbar3d'` or `'waterfall'`.
+
+The `nodeType` option can be one of `'NODESET'`, `'NODE'`, `'STRING'`, `'BOOLEAN'`, `'NUMBER'`.
+
+When using `csvFile`, it is not possible to mix `includeColumn` and `excludeColumn` or use both `String` and `int`
+arguments.
+
+```groovy
+job('example-1') {
+    publishers {
+        plotBuildData {
+            plot('Important Plot', 'my_data_store.csv') {
+                propertiesFile('my_data.properties')
+            }
+        }
+    }
+}
+
+job('example-2') {
+    publishers {
+        plotBuildData {
+            plot('Bar Charts', 'bar_chart_data_store.csv') {
+                style('bar')
+                propertiesFile('my_data.properties') {
+                    label('My Label')
+                }
+            }
+        }
+    }
+}
+
+job('example-3') {
+    publishers {
+        plotBuildData {
+            plot('Exciting plots', 'excitment.csv') {
+                title('X vs Y')
+                yAxis('Y')
+                numberOfBuilds(42)
+                useDescriptions()
+                keepRecords()
+                excludeZero()
+                logarithmic()
+                propertiesFile('my_data.properties') {
+                    label('Builds')
+                }
+            }
+        }
+    }
+}
+
+job('example-4') {
+    publishers {
+        plotBuildData {
+            plot('Other charts', '123012992213.csv') {
+                style('line3d')
+                csvFile('my_data.properties') {
+                    includeColumns(1, 8, 14)
+                    showTable()
+                }
+            }
+        }
+    }
+}
+```
+
+(since 1.31)
+
 #### [Pmd](https://wiki.jenkins-ci.org/display/JENKINS/PMD+Plugin)
 ```groovy
 publishers {
@@ -3898,6 +4543,40 @@ job('example') {
 
 (since 1.26)
 
+#### Deploy Maven Artifacts
+
+```groovy
+job {
+    publishers {
+        deployArtifacts {
+            uniqueVersion(boolean uniqueVersion = true)   // defaults to true
+            evenIfUnstable(boolean evenIfUnstable = true) // defaults to false
+        }
+    }
+}
+```
+
+Deploy artifacts to a Maven repository. Only available for Maven jobs. Requires the
+[Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin).
+
+```groovy
+job {
+    publishers {
+        deployArtifacts()
+    }
+}
+
+job {
+    publishers {
+        deployArtifacts {
+            evenIfUnstable()
+        }
+    }
+}
+```
+
+(since 1.31)
+
 ### Text Finder
 
 Searches for keywords in files or the console log and uses that to downgrade a build to be unstable or a failure. Requires the [Text Finder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Text-finder+Plugin).
@@ -3922,6 +4601,37 @@ publishers {
 ```
 
 (Since 1.19)
+
+### Post Build Scripts
+
+```groovy
+job {
+    publishers {
+        postBuildScripts {
+            steps(Closure stepClosure)
+            onlyIfBuildSucceeds(boolean onlyIfBuildSucceeds = true) // defaults to true
+        }
+    }
+}
+```
+
+Execute a set of scripts at the end of the build. Requires the
+[PostBuildScript Plugin](https://wiki.jenkins-ci.org/display/JENKINS/PostBuildScript+Plugin).
+
+```groovy
+job {
+    publishers {
+        postBuildScripts {
+            steps {
+                shell('echo Hello World')
+            }
+            onlyIfBuildSucceeds(false)
+        }
+    }
+}
+```
+
+(since 1.31)
 
 ### [Post Build Task](https://wiki.jenkins-ci.org/display/JENKINS/Post+build+task)
 
@@ -3949,7 +4659,30 @@ publishers {
 }
 ```
 
-(Since 1.19)
+(since 1.19)
+
+### Aggregate Build Flow Test Results
+
+```groovy
+buildFlowJob {
+    publishers {
+        aggregateBuildFlowTests()
+    }
+}
+```
+
+Aggregates test results from builds started dynamically by build flow jobs. Requires the
+[Build Flow Test Aggregator Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Flow+Test+Aggregator+Plugin).
+
+```groovy
+buildFlowJob('example') {
+    publishers {
+        aggregateBuildFlowTests()
+    }
+}
+```
+
+(since 1.35)
 
 ### Aggregate Downstream Test Results
 
@@ -4098,42 +4831,48 @@ associatedFiles(String associatedFilesPattern)
 
 ### Robot Framework Reports
 
-Supports [Robot Framework Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin) to publish the reports from Robot Framework execution:
-
 ```groovy
-publishRobotFrameworkReports(Closure closure = null)
-```
-
-If no `closure` is provided, default values will be used that are based on [Jenkins Robot Framework plugin](https://github.com/jenkinsci/robot-plugin/blob/master/src/main/java/hudson/plugins/robot/RobotPublisher.java). The following properties can configured using the closure:
-
-```groovy
-publishRobotFrameworkReports {
-    passThreshold(double)     // A double value in range (0.0, 100.0). The default is 100.0.
-    unstableThreshold(double) // A double value in range (0.0, 100.0). The default is 0.0.
-    onlyCritical(boolean)     // A boolean value. The default is false
-    outputPath(String)        // The path to the reports. The default is 'target/robotframework-reports'.
-    reportFileName(String)    // The name of the report file. The default is 'report.html'.
-    logFileName(String)       // The name of the log file. The default is 'log.html'.
-    outputFileName(String)    // The name of the output file. The default is 'output.xml'.
+job {
+    publishers {
+        publishRobotFrameworkReports {
+            passThreshold(double threshold)
+            unstableThreshold(double threshold)
+            onlyCritical(boolean value = true)
+            outputPath(String path)
+            reportFileName(String fileName)
+            logFileName(String fileName)
+            outputFileName(String fileName)
+            disableArchiveOutput(boolean value = true) // since 1.33
+            otherFiles(String... files)                // since 1.33
+        }
+    }
 }
 ```
 
-For example, to mark a build status with more relaxed threshold values and only on the critical test cases from Robot Framework:
+Collects and publishes Robot Framework test results. Requires the
+[Robot Framework Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin).
+
+The default values for all options are shown in the example below.
 
 ```groovy
-publishRobotFrameworkReports {
-    passThreshold(90.0)
-    onlyCritical(true)
+job('example') {
+    publishers {
+        publishRobotFrameworkReports {
+            passThreshold(100.0)
+            unstableThreshold(0.0)
+            onlyCritical(false)
+            outputPath('target/robotframework-reports')
+            reportFileName('report.html')
+            logFileName('log.html')
+            outputFileName('output.xml')
+            disableArchiveOutput(false)
+            otherFiles()
+        }
+    }
 }
 ```
 
-Or to use the default configurations with the plugin:
-
-```groovy
-publishRobotFrameworkReports()
-```
-
-(Since 1.21)
+(since 1.21)
 
 ### Build Pipeline Trigger
 
@@ -4323,6 +5062,41 @@ job('example-3') {
 
 (Since 1.23)
 
+### Sonar
+
+```groovy
+job {
+    publishers {
+        sonar {
+            branch(String branch)
+            overrideTriggers {
+                skipIfEnvironmentVariable(String environmentVariable)
+            }
+        }
+    }
+}
+```
+
+Allows to trigger SonarQube analysis. Requires the
+[Sonar Plugin](http://docs.sonarqube.org/display/SONAR/Jenkins+Plugin).
+
+```groovy
+// run Sonar analysis for feature-xy branch,
+// but skip if SKIP_SONAR environment variable is set to true
+job {
+    publishers {
+        sonar {
+            branch('feature-xy')
+            overrideTriggers {
+                skipIfEnvironmentVariable('SKIP_SONAR')
+            }
+        }
+    }
+}
+```
+
+(since 1.31)
+
 ### StashNotifier Publisher
 
 ```groovy
@@ -4511,7 +5285,7 @@ job {
             nUnit { ... }                                   // see aUnit closure above
             phpUnit { ... }                                 // see aUnit closure above
             qTestLib { ... }                                // see aUnit closure above
-            unitTestvalgrind { ... }                        // see aUnit closure above
+            valgrind { ... }                                // see aUnit closure above
             customTool {
                 // all options from the aUnit closure above, plus
                 stylesheet(String url)                      // empty by default
@@ -4593,10 +5367,10 @@ job {
     publishers {
         s3(String profile) {
             entry(String source, String bucket, String region) {
-                storageClass(String storageClass)                   // default is 'STANDARD'
-                noUploadOnFailure(boolean noUploadOnFailure = true) // default is false
-                uploadFromSlave(boolean uploadFromSlave = true)     // default is false
-                managedArtifacts(boolean managedArtifacts = true)   // default is false
+                storageClass(String storageClass)
+                noUploadOnFailure(boolean noUploadOnFailure = true)
+                uploadFromSlave(boolean uploadFromSlave = true)
+                managedArtifacts(boolean managedArtifacts = true)
             }
             metadata(String key, String value)
         }
@@ -4606,15 +5380,15 @@ job {
 
 Adds a S3 bucket publisher. Requires the [S3 Plugin](https://wiki.jenkins-ci.org/display/JENKINS/S3+Plugin).
 
-Valid values for region are `'GovCloud'`, `'US_EAST_1'`, `'US_WEST_1'`, `'US_WEST_2'`, `'EU_WEST_1'`,
-`'AP_SOUTHEAST_1'`, `'AP_SOUTHEAST_2'`, `'AP_NORTHEAST_1'`, `'SA_EAST_1'` or `'CN_NORTH_1'`. The storage class can be
-either `'STANDARD'` or `'REDUCED_REDUNDANCY'`.
+Valid values for region are `'us-gov-west-1'`, `'us-east-1'`, `'us-west-1'`, `'us-west-2'`, `'eu-west-1'`,
+`'eu-central-1'`, `'ap-southeast-1'`, `'ap-southeast-2'`, `'ap-northeast-1'`, `'sa-east-1'` or `'cn-north-1'`. The
+storage class can be either `'STANDARD'` or `'REDUCED_REDUNDANCY'`.
 
 ```groovy
 job('example') {
     publishers {
         s3('myProfile') {
-            entry('foo', 'bar', 'EU_WEST_1') {
+            entry('foo', 'bar', 'eu-west-1') {
                 storageClass('REDUCED_REDUNDANCY')
                 noUploadOnFailure()
                 uploadFromSlave()
@@ -4624,15 +5398,17 @@ job('example') {
 }
 ```
 
+(since 1.26)
+
 ### Flexible publish
 
 ```groovy
 job {
     publishers {
         flexiblePublish {
-            condition(Closure runConditionClosure) // any run condition closure, see conditionalSteps above
-            publisher(Closure publishersClosure)   // publishers closure containing a single publisher
-            step(Closure stepsClosure)             // steps closure containing a single build step
+            condition(Closure runConditionClosure) // see conditionalSteps
+            publisher(Closure publishersClosure)
+            step(Closure stepsClosure)
         }
     }
 }
@@ -4640,11 +5416,10 @@ job {
 
 Configures a conditional publisher action. Requires the
 [Flexible Publish Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Flexible+Publish+Plugin).
-If the
-[Any Build Step Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Any+Build+Step+Plugin)
-is installed, then a build step can be used instead of a publisher. Note that
-in any case, only one build step or one publisher can be given (this is a
-limitation of the Flexible Publish Plugin).
+
+If the [Any Build Step Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Any+Build+Step+Plugin) is installed, then
+build steps can be used together with publishers. When using versions older then 0.13 of the Flexible Publish Plugin,
+only one build step or one publisher can be used.
 
 Examples:
 
@@ -4667,7 +5442,7 @@ job('example-2') {
         flexiblePublish {
             condition {
                 and {
-                    stringsMatch('foo', 'bar')
+                    stringsMatch('foo', 'bar', false)
                 } {
                     status('SUCCESS', 'SUCCESS')
                 }
@@ -4681,6 +5456,72 @@ job('example-2') {
 ```
 
 (since 1.26)
+
+### Retry Build After Failure
+
+```groovy
+job {
+    publishers {
+        retryBuild {
+            rerunIfUnstable(boolean rerun = true)    // defaults to false
+            retryLimit(int limit)                    // defaults to 0
+            progressiveDelay(int increment, int max)
+            fixedDelay(int delay)
+        }
+    }
+}
+```
+
+Allows to automatically reschedule a build after a failure. Requires version 1.15 or later of the
+[Naginator Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Naginator+Plugin).
+
+The parameters for `progressiveDelay` and `fixedDelay` must be specified in seconds. By default a progressive delay with
+an increment of 5 minutes and a maximum of 3 hours is used.
+
+```groovy
+job('example') {
+    publishers {
+        retryBuild {
+            rerunIfUnstable()
+            retryLimit(3)
+            progressiveDelay(60, 600)
+        }
+    }
+}
+```
+
+(since 1.33)
+
+### GitHub Pull Request Merger
+
+```groovy
+job {
+    publishers {
+        mergePullRequest {
+            mergeComment(String comment)             // empty by default
+            onlyTriggerPhrase(boolean enable = true) // defaults to false
+            onlyAdminsMerge(boolean enable = true)   // defaults to false
+            disallowOwnCode(boolean enable = true)   // defaults to false
+        }
+    }
+}
+```
+
+Allows to merge the pull request if the build was successful. Requires version 1.17 or later of the
+[GitHub Pull Request Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin).
+
+```groovy
+job('example') {
+    publishers {
+        mergePullRequest {
+            mergeComment('merged by Jenkins')
+            disallowOwnCode()
+        }
+    }
+}
+```
+
+(since 1.33)
 
 # Parameters
 **Note: In all cases apart from File Parameter the parameterName argument can't be null or empty**
@@ -4895,12 +5736,116 @@ job('example-2') {
 
 (since 1.30)
 
+### Git Parameter
+
+```groovy
+job {
+    parameters {
+        gitParam(String name) {
+            description(String description)   // empty by default
+            type(String type)                 // defaults to 'TAG'
+            branch(String branch)             // empty by default
+            tagFilter(String tagFilter)       // empty by default
+            sortMode(SortMode sortMode)       // defaults to 'NONE'
+            defaultValue(String defaultValue) // empty by default
+        }
+    }
+}
+```
+
+Allows you to assign a Git tag or revision as parameter in parametrized builds. Requires the
+[Git Parameter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Git+Parameter+Plugin).
+
+The `type` parameter can be one of `'TAG'`, `'BRANCH'`, `'BRANCH_TAG'` or `'REVISION'`. The `sortMode` can be either
+`'NONE'`, `'ASCENDING_SMART'`, `'DESCENDING_SMART'`, `'ASCENDING'` or `'DESCENDING'`.
+
+```groovy
+job('example') {
+    parameters {
+        gitParam('sha') {
+            description('Revision commit SHA')
+            type('REVISION')
+            branch('master')
+        }
+    }
+}
+```
+
+(since 1.31)
+
+# Job Properties
+
+### Sidebar Links
+
+```groovy
+job {
+    properties {
+        sidebarLinks {
+            link(String url, String text, String icon = null)
+        }
+    }
+}
+```
+
+Add links in the sidebar of the project page. Requires the
+[Sidebar-Link Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Sidebar-Link+Plugin).
+
+The icon may be a plain filename of an image in Jenkins' `images/24x24` directory (such as `help.gif`, `document.gif` or
+`refresh.gif`), or `/userContent/filename.ext` for a custom icon placed in the `JENKINS_HOME/userContent` directory.
+User content can also be uploaded by using the `userContent` DSL method, see
+[[Job-DSL-Commands#uploading-user-content]].
+
+```groovy
+userContent('wiki.png', streamFileFromWorkspace('images/wiki.png'))
+
+job('example') {
+    properties {
+        sidebarLinks {
+            // use built-in image
+            link('https://jira.acme.org/', 'JIRA', 'notepad.png')
+            // use uploaded image
+            link('https://wiki.acme.org/', 'Wiki', '/userContent/wiki.png')
+        }
+    }
+}
+```
+
+(since 1.33)
+
+### Custom Icon
+
+```groovy
+job {
+    properties {
+        customIcon(String iconFileName)
+    }
+}
+```
+
+Allows to configure a custom icon for each job. Requires the
+[Custom Job Icon Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Custom+Job+Icon+Plugin).
+
+The `iconFileName` must point to a custom icon placed in the `JENKINS_HOME/userContent/customIcon` directory. User
+content can be uploaded by using the `userContent` DSL method, see [[Job-DSL-Commands#uploading-user-content]].
+
+```groovy
+userContent('customIcon/job.png', streamFileFromWorkspace('icons/job.png'))
+
+job('example') {
+    properties {
+        customIcon('job.png')
+    }
+}
+```
+
+(since 1.33)
+
 # Workflow Definitions
 
 ### Groovy CPS DSL
 
 ```
-job(type: Workflow) {
+workflowJob {
     definition {
         cps {
             script(String script)
@@ -4918,7 +5863,7 @@ def flow = '''node {
   def mvnHome = tool 'M3'
   sh "${mvnHome}/bin/mvn -B verify"
 }'''
-job('example-1', type: Workflow) {
+workflowJob('example-1') {
     definition {
         cps {
             script(flow)
@@ -4926,7 +5871,7 @@ job('example-1', type: Workflow) {
     }
 }
 
-job('example-2', type: Workflow) {
+workflowJob('example-2') {
     definition {
         cps {
             script(readFileFromWorkspace('project-a-workflow.groovy'))

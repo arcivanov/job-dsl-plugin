@@ -47,7 +47,7 @@ class ListView extends View {
     }
 
     void columns(@DslContext(ColumnsContext) Closure columnsClosure) {
-        ColumnsContext context = new ColumnsContext()
+        ColumnsContext context = new ColumnsContext(jobManagement)
         executeInContext(columnsClosure, context)
 
         execute {
@@ -57,6 +57,9 @@ class ListView extends View {
         }
     }
 
+    /**
+     * @since 1.29
+     */
     void jobFilters(@DslContext(JobFiltersContext) Closure jobFiltersClosure) {
         JobFiltersContext context = new JobFiltersContext()
         executeInContext(jobFiltersClosure, context)
@@ -65,6 +68,15 @@ class ListView extends View {
             context.filterNodes.each { filterNode ->
                 it / 'jobFilters' << filterNode
             }
+        }
+    }
+
+    /**
+     * @since 1.31
+     */
+    void recurse(boolean shouldRecurse = true) {
+        execute {
+            it / 'recurse' << shouldRecurse
         }
     }
 

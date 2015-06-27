@@ -1,9 +1,11 @@
 package javaposse.jobdsl.dsl.helpers
 
+import javaposse.jobdsl.dsl.JobManagement
 import spock.lang.Specification
 
 class BuildParametersContextSpec extends Specification {
-    BuildParametersContext context = new BuildParametersContext()
+    JobManagement jobManagement = Mock(JobManagement)
+    BuildParametersContext context = new BuildParametersContext(jobManagement)
 
     def 'base booleanParam usage'() {
         when:
@@ -106,6 +108,7 @@ class BuildParametersContextSpec extends Specification {
             maxTags.text() == 'maximumNumberOfTagsToDisplay'
             description.text() == 'myListTagsParameterDescription'
         }
+        1 * jobManagement.requirePlugin('subversion')
     }
 
     def 'simplified listTagsParam usage'() {
@@ -125,6 +128,7 @@ class BuildParametersContextSpec extends Specification {
             reverseByName.text() == 'true'
             maxTags.text() == 'all'
         }
+        1 * jobManagement.requirePlugin('subversion')
     }
 
     def 'simplest listTagsParam usage'() {
@@ -143,6 +147,7 @@ class BuildParametersContextSpec extends Specification {
             reverseByName.text() == 'false'
             maxTags.text() == 'all'
         }
+        1 * jobManagement.requirePlugin('subversion')
     }
 
     def 'listTagsParam name argument cant be null'() {
@@ -177,20 +182,26 @@ class BuildParametersContextSpec extends Specification {
         thrown(IllegalArgumentException)
     }
 
-    def 'listTagsParam tagFilterRegex argument cant be null'() {
+    def 'listTagsParam tagFilterRegex argument can be null or empty'(String filter) {
         when:
-        context.listTagsParam('myParameterName', 'http://kenai.com/svn/myProject/tags', null)
+        context.listTagsParam('myParameterName', 'http://kenai.com/svn/myProject/tags', filter)
 
         then:
-        thrown(NullPointerException)
-    }
+        context.buildParameterNodes != null
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['myParameterName']) {
+            name() == 'hudson.scm.listtagsparameter.ListSubversionTagsParameterDefinition'
+            name.text() == 'myParameterName'
+            tagsDir.text() == 'http://kenai.com/svn/myProject/tags'
+            tagsFilter.text() == ''
+            reverseByDate.text() == 'false'
+            reverseByName.text() == 'false'
+            maxTags.text() == 'all'
+        }
+        1 * jobManagement.requirePlugin('subversion')
 
-    def 'listTagsParam tagFilterRegex argument cant be empty'() {
-        when:
-        context.listTagsParam('myParameterName', 'http://kenai.com/svn/myProject/tags', '')
-
-        then:
-        thrown(IllegalArgumentException)
+        where:
+        filter << [null, '']
     }
 
     def 'listTagsParam already defined'() {
@@ -561,6 +572,7 @@ class BuildParametersContextSpec extends Specification {
             triggerConcurrentBuilds[0].value() == false
             ignoreOfflineNodes[0].value() == false
         }
+        1 * jobManagement.requirePlugin('nodelabelparameter')
     }
 
     def 'nodeParam fullest usage'() {
@@ -593,6 +605,7 @@ class BuildParametersContextSpec extends Specification {
             triggerConcurrentBuilds[0].value() == false
             ignoreOfflineNodes[0].value() == false
         }
+        1 * jobManagement.requirePlugin('nodelabelparameter')
     }
 
     def 'nodeParam name argument cant be null'() {
@@ -657,6 +670,7 @@ class BuildParametersContextSpec extends Specification {
             nodeEligibility.size() == 1
             nodeEligibility[0].@class == 'org.jvnet.jenkins.plugins.nodelabelparameter.node.AllNodeEligibility'
         }
+        1 * jobManagement.requirePlugin('nodelabelparameter')
     }
 
     def 'labelParam simplest usage'() {
@@ -677,6 +691,7 @@ class BuildParametersContextSpec extends Specification {
             nodeEligibility.size() == 1
             nodeEligibility[0].@class == 'org.jvnet.jenkins.plugins.nodelabelparameter.node.AllNodeEligibility'
         }
+        1 * jobManagement.requirePlugin('nodelabelparameter')
     }
 
     def 'labelParam run on all nodes'() {
@@ -699,6 +714,7 @@ class BuildParametersContextSpec extends Specification {
             nodeEligibility.size() == 1
             nodeEligibility[0].@class == 'org.jvnet.jenkins.plugins.nodelabelparameter.node.AllNodeEligibility'
         }
+        1 * jobManagement.requirePlugin('nodelabelparameter')
     }
 
     def 'labelParam allNodes accepts valid values only'(String trigger, String eligibility) {
@@ -739,6 +755,7 @@ class BuildParametersContextSpec extends Specification {
             nodeEligibility[0].@class ==
                     'org.jvnet.jenkins.plugins.nodelabelparameter.node.IgnoreOfflineNodeEligibility'
         }
+        1 * jobManagement.requirePlugin('nodelabelparameter')
     }
 
     def 'labelParam name argument cant be null'() {
@@ -764,6 +781,82 @@ class BuildParametersContextSpec extends Specification {
 
         then:
         thrown(IllegalArgumentException)
+    }
+
+    def 'gitParam already defined'() {
+        when:
+        context.stringParam('paramName')
+        context.gitParam('paramName')
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'gitParam name argument cant be null'() {
+        when:
+        context.gitParam(null)
+
+        then:
+        thrown(NullPointerException)
+    }
+
+    def 'gitParam name argument cant be empty'() {
+        when:
+        context.gitParam('')
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'gitParam minimal options'() {
+        when:
+        context.gitParam('paramName')
+
+        then:
+        context.buildParameterNodes != null
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['paramName']) {
+            name() == 'net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition'
+            children().size() == 8
+            name.text() == 'paramName'
+            description[0].value() == ''
+            UUID.fromString(uuid[0].value() as String)
+            type[0].value() == 'PT_TAG'
+            branch[0].value() == ''
+            tagFilter[0].value() == ''
+            sortMode[0].value() == 'NONE'
+            defaultValue[0].value() == ''
+        }
+        1 * jobManagement.requireMinimumPluginVersion('git-parameter', '0.4.0')
+    }
+
+    def 'gitParam all options'() {
+        when:
+        context.gitParam('sha') {
+            description('Revision commit SHA')
+            type('REVISION')
+            branch('master')
+            tagFilter('*')
+            sortMode('ASCENDING_SMART')
+            defaultValue('foo')
+        }
+
+        then:
+        context.buildParameterNodes != null
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['sha']) {
+            name() == 'net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition'
+            children().size() == 8
+            name.text() == 'sha'
+            description[0].value() == 'Revision commit SHA'
+            UUID.fromString(uuid[0].value() as String)
+            type[0].value() == 'PT_REVISION'
+            branch[0].value() == 'master'
+            tagFilter[0].value() == '*'
+            sortMode[0].value() == 'ASCENDING_SMART'
+            defaultValue[0].value() == 'foo'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('git-parameter', '0.4.0')
     }
 
     def 'multiple mixed Param types is just fine'() {

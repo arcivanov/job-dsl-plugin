@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.helpers.step
 
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.helpers.step.condition.RunCondition
 import javaposse.jobdsl.dsl.helpers.step.condition.RunConditionFactory
@@ -11,8 +12,8 @@ class ConditionalStepsContext extends StepContext {
     RunCondition runCondition
     String runnerClass
 
-    ConditionalStepsContext(JobManagement jobManagement) {
-        super(jobManagement)
+    ConditionalStepsContext(JobManagement jobManagement, Item item) {
+        super(jobManagement, item)
     }
 
     void condition(@DslContext(RunConditionContext) Closure conditionClosure) {
@@ -24,38 +25,13 @@ class ConditionalStepsContext extends StepContext {
         runnerClass = EvaluationRunners.find(runnerName).longForm
     }
 
+    @Deprecated
     void runner(EvaluationRunners runner) {
+        jobManagement.logDeprecationWarning()
         runnerClass = runner.longForm
     }
 
-    protected Node createSingleStepNode() {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-
-        nodeBuilder.'org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder' {
-            delegate.condition(class: runCondition.conditionClass) {
-                runCondition.addArgs(delegate)
-            }
-            runner(class: runnerClass)
-            buildStep(class: stepNodes[0].name()) {
-                stepNodes[0].children().each { c ->
-                    "${c.name()}"(c.attributes(), c.value())
-                }
-            }
-        }
-    }
-
-    protected Node createMultiStepNode() {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-
-        nodeBuilder.'org.jenkinsci.plugins.conditionalbuildstep.ConditionalBuilder' {
-            runCondition(class: runCondition.conditionClass) {
-                runCondition.addArgs(delegate)
-            }
-            runner(class: runnerClass)
-            conditionalbuilders(stepNodes)
-        }
-    }
-
+    @Deprecated
     static enum EvaluationRunners {
         Fail('org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail'),
         Unstable('org.jenkins_ci.plugins.run_condition.BuildStepRunner$Unstable'),
@@ -72,6 +48,5 @@ class ConditionalStepsContext extends StepContext {
         static find(String enumName) {
             values().find { it.name().toLowerCase() == enumName.toLowerCase() }
         }
-
     }
 }

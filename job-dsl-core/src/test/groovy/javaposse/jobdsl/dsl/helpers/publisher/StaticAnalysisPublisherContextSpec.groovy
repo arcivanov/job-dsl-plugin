@@ -1,15 +1,17 @@
 package javaposse.jobdsl.dsl.helpers.publisher
 
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import spock.lang.Specification
 import spock.lang.Unroll
 
 class StaticAnalysisPublisherContextSpec extends Specification {
     JobManagement jobManagement = Mock(JobManagement)
-    PublisherContext context = new PublisherContext(jobManagement)
+    Item item = Mock(Item)
+    PublisherContext context = new PublisherContext(jobManagement, item)
 
     @Unroll
-    def 'add #analysisTool with default values'(String analysisTool, Map extraNodes) {
+    def 'add #analysisTool with default values'(String analysisTool, Map extraNodes, String pluginId) {
         when:
         context."${analysisTool}"('somewhere')
 
@@ -30,18 +32,19 @@ class StaticAnalysisPublisherContextSpec extends Specification {
                 doNotResolveRelativePaths: true,
                 thresholds: []
         )
+        1 * jobManagement.requirePlugin(pluginId)
 
         where:
-        analysisTool      | extraNodes
-        'pmd'             | [:]
-        'findbugs'        | [isRankActivated: false]
-        'ccm'             | [:]
-        'dependencyCheck' | [:]
-        'androidLint'     | [:]
-        'checkstyle'      | [:]
-        'jshint'          | [:]
-        'dry'             | [highThreshold: 50, normalThreshold: 25]
-        'tasks'           | [excludePattern: '', high: '', normal: '', low: '', ignoreCase: false]
+        analysisTool      | extraNodes                                                             | pluginId
+        'pmd'             | [:]                                                                    | 'pmd'
+        'findbugs'        | [isRankActivated: false]                                               | 'findbugs'
+        'ccm'             | [:]                                                                    | 'ccm'
+        'dependencyCheck' | [:]                                                      | 'dependency-check-jenkins-plugin'
+        'androidLint'     | [:]                                                                    | 'android-lint'
+        'checkstyle'      | [:]                                                                    | 'checkstyle'
+        'jshint'          | [:]                                                                    | 'jshint-checkstyle'
+        'dry'             | [highThreshold: 50, normalThreshold: 25]                               | 'dry'
+        'tasks'           | [excludePattern: '', high: '', normal: '', low: '', ignoreCase: false] | 'tasks'
     }
 
     def 'add warnings with default values'() {
@@ -221,6 +224,7 @@ class StaticAnalysisPublisherContextSpec extends Specification {
                 isOpenTasksDeactivated: true,
                 isWarningsDeactivated: true
         )
+        1 * jobManagement.requirePlugin('analysis-collector')
     }
 
     def 'add analysis collector with all values'() {
@@ -278,6 +282,7 @@ class StaticAnalysisPublisherContextSpec extends Specification {
                 unstableNewAll: 9, unstableNewHigh: 10, unstableNewNormal: 11, unstableNewLow: 12,
                 failedNewAll: 13, failedNewHigh: 14, failedNewNormal: 15, failedNewLow: 16,
         )
+        1 * jobManagement.requirePlugin('analysis-collector')
     }
 
     private static void assertValues(Map map, baseNode, List notCheckedNodes = [], Map extraNodes = [:]) {

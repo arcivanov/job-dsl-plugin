@@ -1,19 +1,17 @@
 package javaposse.jobdsl.dsl
 
-import hudson.util.VersionNumber
 import org.apache.commons.codec.digest.DigestUtils
 
 /**
  * In-memory JobManagement for testing.
  */
-class MemoryJobManagement extends AbstractJobManagement {
+class MemoryJobManagement extends MockJobManagement {
     final Map<String, String> availableConfigs = [:]
     final Map<String, String> savedConfigs = [:]
     final Map<String, String> savedViews = [:]
     final Set<ConfigFile> savedConfigFiles = []
     final Map<String, String> availableFiles = [:]
 
-    final Map<String, String> parameters = [:]
     final List<String> scheduledJobs = []
 
     MemoryJobManagement() {
@@ -32,8 +30,10 @@ class MemoryJobManagement extends AbstractJobManagement {
     }
 
     @Override
-    boolean createOrUpdateConfig(String jobName, String config, boolean ignoreExisting)
-            throws NameNotProvidedException, ConfigurationMissingException {
+    boolean createOrUpdateConfig(Item item, boolean ignoreExisting) throws NameNotProvidedException {
+        String jobName = item.name
+        String config = item.xml
+
         validateUpdateArgs(jobName, config)
 
         savedConfigs[jobName] = config
@@ -55,10 +55,6 @@ class MemoryJobManagement extends AbstractJobManagement {
     }
 
     @Override
-    void renameJobMatching(String previousNames, String destination) throws IOException {
-    }
-
-    @Override
     void queueJob(String jobName) throws NameNotProvidedException {
         scheduledJobs << jobName
     }
@@ -75,25 +71,6 @@ class MemoryJobManagement extends AbstractJobManagement {
             throw new FileNotFoundException(filePath)
         }
         body
-    }
-
-    @Override
-    void requireMinimumPluginVersion(String pluginShortName, String version) {
-    }
-
-    @Override
-    String getCredentialsId(String credentialsDescription) {
-        null
-    }
-
-    @Override
-    VersionNumber getPluginVersion(String pluginShortName) {
-        null
-    }
-
-    @Override
-    Integer getVSphereCloudHash(String name) {
-        null
     }
 
     @Override

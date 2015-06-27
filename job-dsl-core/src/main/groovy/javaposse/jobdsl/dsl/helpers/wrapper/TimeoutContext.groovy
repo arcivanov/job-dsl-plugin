@@ -1,23 +1,26 @@
 package javaposse.jobdsl.dsl.helpers.wrapper
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 
 /**
  * Context to configure build timeouts.
  */
-class TimeoutContext implements Context {
-    private final JobManagement jobManagement
+class TimeoutContext extends AbstractContext {
     Node strategy
     List<Node> operations = []
 
     TimeoutContext(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+        super(jobManagement)
 
         // apply defaults
         absolute()
     }
 
+    /**
+     * @since 1.24
+     */
     void elastic(int percentage = 150, int numberOfBuilds = 3, int minutesDefault = 60) {
         setStrategy('Elastic') {
             timeoutPercentage(percentage)
@@ -26,24 +29,35 @@ class TimeoutContext implements Context {
         }
     }
 
+    /**
+     * @since 1.24
+     */
+    @RequiresPlugin(id = 'build-timeout', minimumVersion = '1.13')
     void noActivity(int seconds = 180) {
-        jobManagement.requireMinimumPluginVersion('build-timeout', '1.13')
-
         setStrategy('NoActivity') {
             timeout(seconds * 1000)
         }
     }
 
+    /**
+     * @since 1.24
+     */
     void absolute(int minutes = 3) {
         setStrategy('Absolute') {
             timeoutMinutes(minutes)
         }
     }
 
+    /**
+     * @since 1.24
+     */
     void likelyStuck() {
         setStrategy('LikelyStuck')
     }
 
+    /**
+     * @since 1.24
+     */
     void failBuild() {
         addOperation('Fail')
     }
@@ -59,12 +73,17 @@ class TimeoutContext implements Context {
         }
     }
 
+    /**
+     * @since 1.30
+     */
+    @RequiresPlugin(id = 'build-timeout', minimumVersion = '1.13')
     void abortBuild() {
-        jobManagement.requireMinimumPluginVersion('build-timeout', '1.13')
-
         addOperation('Abort')
     }
 
+    /**
+     * @since 1.24
+     */
     void writeDescription(String description) {
         addOperation('WriteDescription') {
             delegate.description(description)

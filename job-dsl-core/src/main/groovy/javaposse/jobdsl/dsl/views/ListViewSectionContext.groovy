@@ -1,12 +1,13 @@
 package javaposse.jobdsl.dsl.views
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.JobManagement
 
 import static com.google.common.base.Preconditions.checkArgument
 import static javaposse.jobdsl.dsl.ContextHelper.executeInContext
 
-class ListViewSectionContext implements Context {
+class ListViewSectionContext extends AbstractContext {
     private static final List<String> VALID_WIDTHS = ['FULL', 'HALF', 'THIRD', 'TWO_THIRDS']
     private static final List<String> VALID_ALIGNMENTS = ['CENTER', 'LEFT', 'RIGHT']
 
@@ -15,7 +16,11 @@ class ListViewSectionContext implements Context {
     String alignment = 'CENTER'
     JobsContext jobsContext = new JobsContext()
     JobFiltersContext jobFiltersContext = new JobFiltersContext()
-    ColumnsContext columnsContext = new ColumnsContext()
+    ColumnsContext columnsContext = new ColumnsContext(jobManagement)
+
+    ListViewSectionContext(JobManagement jobManagement) {
+        super(jobManagement)
+    }
 
     void name(String name) {
         this.name = name
@@ -35,6 +40,9 @@ class ListViewSectionContext implements Context {
         executeInContext(jobsClosure, jobsContext)
     }
 
+    /**
+     * @since 1.29
+     */
     void jobFilters(@DslContext(JobFiltersContext) Closure jobFiltersClosure) {
         executeInContext(jobFiltersClosure, jobFiltersContext)
     }

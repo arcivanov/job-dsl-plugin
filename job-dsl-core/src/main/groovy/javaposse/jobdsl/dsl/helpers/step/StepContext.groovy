@@ -2,63 +2,68 @@ package javaposse.jobdsl.dsl.helpers.step
 
 import com.google.common.base.Preconditions
 import hudson.util.VersionNumber
-import javaposse.jobdsl.dsl.Context
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
+import javaposse.jobdsl.dsl.helpers.AbstractExtensibleContext
 import javaposse.jobdsl.dsl.helpers.common.DownstreamContext
+import javaposse.jobdsl.dsl.helpers.common.PublishOverSshContext
 
 import static com.google.common.base.Strings.isNullOrEmpty
-import static javaposse.jobdsl.dsl.helpers.common.MavenContext.LocalRepositoryLocation.LocalToWorkspace
+import static javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation.LOCAL_TO_WORKSPACE
 
-class StepContext implements Context {
-    private static final List<String> VALID_CONTINUATION_CONDITIONS = ['SUCCESSFUL', 'UNSTABLE', 'COMPLETED']
-
+class StepContext extends AbstractExtensibleContext {
     final List<Node> stepNodes = []
-    private final JobManagement jobManagement
 
-    StepContext(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+    StepContext(JobManagement jobManagement, Item item) {
+        super(jobManagement, item)
     }
 
-    /**
-     * <hudson.tasks.Shell>
-     *     <command>echo Hello</command>
-     * </hudson.tasks.Shell>
-     */
+    @Override
+    protected void addExtensionNode(Node node) {
+        stepNodes << node
+    }
+
     void shell(String commandStr) {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        stepNodes << nodeBuilder.'hudson.tasks.Shell' {
+        stepNodes << new NodeBuilder().'hudson.tasks.Shell' {
             'command' commandStr
         }
     }
 
-    /**
-     * <hudson.tasks.BatchFile>
-     *     <command>echo Hello from Windows</command>
-     * </hudson.tasks.BatchFile>
-     */
     void batchFile(String commandStr) {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        stepNodes << nodeBuilder.'hudson.tasks.BatchFile' {
+        stepNodes << new NodeBuilder().'hudson.tasks.BatchFile' {
             'command' commandStr
         }
     }
 
     /**
-     * <hudson.plugins.gradle.Gradle>
-     *     <description/>
-     *     <switches/>
-     *     <tasks/>
-     *     <rootBuildScriptDir/>
-     *     <buildFile/>
-     *     <gradleName>(Default)</gradleName>
-     *     <useWrapper>false</useWrapper>
-     *     <makeExecutable>false</makeExecutable>
-     *     <fromRootBuildScriptDir>true</fromRootBuildScriptDir>
-     * </hudson.plugins.gradle.Gradle>
+     * @since 1.32
      */
+    @RequiresPlugin(id = 'powershell', minimumVersion = '1.2')
+    void powerShell(String command) {
+        stepNodes << new NodeBuilder().'hudson.plugins.powershell.PowerShell' {
+            delegate.command(command)
+        }
+    }
+
+    /**
+     * @since 1.31
+     */
+    @RequiresPlugin(id = 'description-setter', minimumVersion = '1.9')
+    void buildDescription(String regexp, String description = null) {
+        stepNodes << new NodeBuilder().'hudson.plugins.descriptionsetter.DescriptionSetterBuilder' {
+            delegate.regexp(regexp ?: '')
+            delegate.description(description ?: '')
+        }
+    }
+
+    /**
+     * @since 1.27
+     */
+    @RequiresPlugin(id = 'gradle')
     void gradle(@DslContext(GradleContext) Closure gradleClosure) {
         GradleContext gradleContext = new GradleContext()
         ContextHelper.executeInContext(gradleClosure, gradleContext)
@@ -99,20 +104,12 @@ class StepContext implements Context {
     }
 
     /**
-     * <org.jvnet.hudson.plugins.SbtPluginBuilder plugin="sbt@1.4">
-     *     <name>SBT 0.12.3</name>
-     *     <jvmFlags>-XX:+CMSClassUnloadingEnabled -XX:MaxPermSize=512M -Dfile.encoding=UTF-8 -Xmx2G -Xms512M</jvmFlags>
-     *     <sbtFlags>-Dsbt.log.noformat=true</sbtFlags>
-     *     <actions>clean update &quot;env development&quot; test dist publish</actions>
-     *     <subdirPath></subdirPath>
-     * </org.jvnet.hudson.plugins.SbtPluginBuilder>
+     * @since 1.16
      */
-    void sbt(String sbtNameArg, String actionsArg = null, String sbtFlagsArg=null,  String jvmFlagsArg=null,
-            String subdirPathArg=null, Closure configure = null) {
-
-        NodeBuilder nodeBuilder = new NodeBuilder()
-
-        Node sbtNode = nodeBuilder.'org.jvnet.hudson.plugins.SbtPluginBuilder' {
+    @RequiresPlugin(id = 'sbt')
+    void sbt(String sbtNameArg, String actionsArg = null, String sbtFlagsArg = null, String jvmFlagsArg = null,
+             String subdirPathArg = null, Closure configure = null) {
+        Node sbtNode = new NodeBuilder().'org.jvnet.hudson.plugins.SbtPluginBuilder' {
             name Preconditions.checkNotNull(sbtNameArg, 'Please provide the name of the SBT to use' as Object)
             jvmFlags jvmFlagsArg ?: ''
             sbtFlags sbtFlagsArg ?: ''
@@ -120,39 +117,36 @@ class StepContext implements Context {
             subdirPath subdirPathArg ?: ''
         }
 
-        // Apply Context
         if (configure) {
             WithXmlAction action = new WithXmlAction(configure)
             action.execute(sbtNode)
         }
 
         stepNodes << sbtNode
-
     }
 
     /**
-     * <javaposse.jobdsl.plugin.ExecuteDslScripts>
-     *     <targets>sbt-template.groovy</targets>
-     *     <usingScriptText>false</usingScriptText>
-     *     <ignoreExisting>false</ignoreExisting>
-     *     <removedJobAction>IGNORE</removedJobAction>
-     *     <additionalClasspath>libs</additionalClasspath>
-     * </javaposse.jobdsl.plugin.ExecuteDslScripts>
+     * @since 1.16
      */
     void dsl(@DslContext(javaposse.jobdsl.dsl.helpers.step.DslContext) Closure configure) {
         javaposse.jobdsl.dsl.helpers.step.DslContext context = new javaposse.jobdsl.dsl.helpers.step.DslContext()
         ContextHelper.executeInContext(configure, context)
 
         stepNodes << new NodeBuilder().'javaposse.jobdsl.plugin.ExecuteDslScripts' {
-            targets context.externalScripts.join('\n')
-            usingScriptText !isNullOrEmpty(context.scriptText)
-            scriptText context.scriptText ?: ''
-            ignoreExisting context.ignoreExisting
-            removedJobAction context.removedJobAction
-            additionalClasspath context.additionalClasspath ?: ''
+            targets(context.externalScripts.join('\n'))
+            usingScriptText(!isNullOrEmpty(context.scriptText))
+            scriptText(context.scriptText ?: '')
+            ignoreExisting(context.ignoreExisting)
+            removedJobAction(context.removedJobAction)
+            removedViewAction(context.removedViewAction)
+            lookupStrategy(context.lookupStrategy)
+            additionalClasspath(context.additionalClasspath ?: '')
         }
     }
 
+    /**
+     * @since 1.16
+     */
     void dsl(String scriptText, String removedJobAction = null, boolean ignoreExisting = false) {
         dsl {
             text(scriptText)
@@ -163,6 +157,9 @@ class StepContext implements Context {
         }
     }
 
+    /**
+     * @since 1.16
+     */
     void dsl(Iterable<String> externalScripts, String removedJobAction = null, boolean ignoreExisting = false) {
         dsl {
             external(externalScripts)
@@ -173,19 +170,6 @@ class StepContext implements Context {
         }
     }
 
-    /**
-     * <hudson.tasks.Ant>
-     *     <targets>target</targets>
-     *     <antName>Ant 1.8</antName>
-     *     <antOpts>-XX:MaxPermSize=128M -Dorg.apache.jasper.compiler.Parser.STRICT_QUOTE_ESCAPING=false</antOpts>
-     *     <buildFile>build.xml</buildFile>
-     *     <properties>
-     *         test.jvmargs=-Xmx=1g
-     *         test.maxmemory=2g
-     *         multiline=true
-     *     </properties>
-     * </hudson.tasks.Ant>
-     */
     void ant(@DslContext(AntContext) Closure antClosure = null) {
         ant(null, null, null, antClosure)
     }
@@ -198,6 +182,7 @@ class StepContext implements Context {
         ant(targetsStr, buildFileStr, null, antClosure)
     }
 
+    @RequiresPlugin(id = 'ant')
     void ant(String targetsArg, String buildFileArg, String antInstallation,
              @DslContext(AntContext) Closure antClosure = null) {
         AntContext antContext = new AntContext()
@@ -215,8 +200,7 @@ class StepContext implements Context {
         List<String> propertiesList = []
         propertiesList += antContext.props
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node antNode = nodeBuilder.'hudson.tasks.Ant' {
+        Node antNode = new NodeBuilder().'hudson.tasks.Ant' {
             targets targetList.join(' ')
 
             antName antInstallation ?: antContext.antName ?: '(Default)'
@@ -237,19 +221,6 @@ class StepContext implements Context {
         stepNodes << antNode
     }
 
-    /**
-     * <hudson.plugins.groovy.Groovy>
-     *     <scriptSource class="hudson.plugins.groovy.StringScriptSource">
-     *         <command>Command</command>
-     *     </scriptSource>
-     *     <groovyName>(Default)</groovyName>
-     *     <parameters/>
-     *     <scriptParameters/>
-     *     <properties/>
-     *     <javaOpts/>
-     *     <classPath/>
-     * </hudson.plugins.groovy.Groovy>
-     */
     void groovyCommand(String command, @DslContext(GroovyContext) Closure groovyClosure = null) {
         groovy(command, true, null, groovyClosure)
     }
@@ -258,19 +229,6 @@ class StepContext implements Context {
         groovy(command, true, groovyName, groovyClosure)
     }
 
-    /**
-     * <hudson.plugins.groovy.Groovy>
-     *     <scriptSource class="hudson.plugins.groovy.FileScriptSource">
-     *         <scriptFile>acme.groovy</scriptFile>
-     *     </scriptSource>
-     *     <groovyName>(Default)</groovyName>
-     *     <parameters/>
-     *     <scriptParameters/>
-     *     <properties/>
-     *     <javaOpts/>
-     *     <classPath/>
-     * </hudson.plugins.groovy.Groovy>
-     */
     void groovyScriptFile(String fileName, @DslContext(GroovyContext) Closure groovyClosure = null) {
         groovy(fileName, false, null, groovyClosure)
     }
@@ -280,8 +238,7 @@ class StepContext implements Context {
     }
 
     protected groovyScriptSource(String commandOrFileName, boolean isCommand) {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        nodeBuilder.scriptSource(class: "hudson.plugins.groovy.${isCommand ? 'String' : 'File'}ScriptSource") {
+        new NodeBuilder().scriptSource(class: "hudson.plugins.groovy.${isCommand ? 'String' : 'File'}ScriptSource") {
             if (isCommand) {
                 command commandOrFileName
             } else {
@@ -290,14 +247,15 @@ class StepContext implements Context {
         }
     }
 
+    @RequiresPlugin(id = 'groovy')
     protected groovy(String commandOrFileName, boolean isCommand, String groovyInstallation, Closure groovyClosure) {
         GroovyContext groovyContext = new GroovyContext()
         ContextHelper.executeInContext(groovyClosure, groovyContext)
 
-        Node groovyNode = NodeBuilder.newInstance().'hudson.plugins.groovy.Groovy' {
+        Node groovyNode = new NodeBuilder().'hudson.plugins.groovy.Groovy' {
             groovyName groovyInstallation ?: groovyContext.groovyInstallation ?: '(Default)'
-            parameters groovyContext.groovyParams.join('\n')
-            scriptParameters groovyContext.scriptParams.join('\n')
+            parameters groovyContext.groovyParams.join(' ')
+            scriptParameters groovyContext.scriptParams.join(' ')
             javaOpts groovyContext.javaOpts.join(' ')
             classPath groovyContext.classpathEntries.join(File.pathSeparator)
         }
@@ -307,37 +265,20 @@ class StepContext implements Context {
         stepNodes << groovyNode
     }
 
-    /**
-     * <hudson.plugins.groovy.SystemGroovy>
-     *     <scriptSource class="hudson.plugins.groovy.StringScriptSource">
-     *         <command>System Groovy</command>
-     *     </scriptSource>
-     *     <bindings/>
-     *     <classpath/>
-     * </hudson.plugins.groovy.SystemGroovy>
-     */
     void systemGroovyCommand(String command, @DslContext(SystemGroovyContext) Closure systemGroovyClosure = null) {
         systemGroovy(command, true, systemGroovyClosure)
     }
 
-    /**
-     * <hudson.plugins.groovy.SystemGroovy>
-     *     <scriptSource class="hudson.plugins.groovy.FileScriptSource">
-     *         <scriptFile>System Groovy</scriptFile>
-     *     </scriptSource>
-     *     <bindings/>
-     *     <classpath/>
-     * </hudson.plugins.groovy.SystemGroovy>
-     */
     void systemGroovyScriptFile(String fileName, @DslContext(SystemGroovyContext) Closure systemGroovyClosure = null) {
         systemGroovy(fileName, false, systemGroovyClosure)
     }
 
+    @RequiresPlugin(id = 'groovy')
     protected systemGroovy(String commandOrFileName, boolean isCommand, Closure systemGroovyClosure) {
         SystemGroovyContext systemGroovyContext = new SystemGroovyContext()
         ContextHelper.executeInContext(systemGroovyClosure, systemGroovyContext)
 
-        Node systemGroovyNode = NodeBuilder.newInstance().'hudson.plugins.groovy.SystemGroovy' {
+        Node systemGroovyNode = new NodeBuilder().'hudson.plugins.groovy.SystemGroovy' {
             bindings systemGroovyContext.bindings.collect { key, value -> "${key}=${value}" }.join('\n')
             classpath systemGroovyContext.classpathEntries.join(File.pathSeparator)
         }
@@ -347,14 +288,9 @@ class StepContext implements Context {
     }
 
     /**
-     * <hudson.tasks.Maven>
-     *     <targets>install</targets>
-     *     <mavenName>(Default)</mavenName>
-     *     <jvmOptions>-Xmx512m</jvmOptions>
-     *     <pom>pom.xml</pom>
-     *     <usePrivateRepository>false</usePrivateRepository>
-     * </hudson.tasks.Maven>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'maven-plugin')
     void maven(@DslContext(MavenContext) Closure closure) {
         MavenContext mavenContext = new MavenContext(jobManagement)
         ContextHelper.executeInContext(closure, mavenContext)
@@ -369,7 +305,7 @@ class StepContext implements Context {
             if (mavenContext.rootPOM) {
                 pom mavenContext.rootPOM
             }
-            usePrivateRepository mavenContext.localRepositoryLocation == LocalToWorkspace ? 'true' : 'false'
+            usePrivateRepository mavenContext.localRepositoryLocation == LOCAL_TO_WORKSPACE
             if (mavenContext.providedSettingsId) {
                 settings(class: 'org.jenkinsci.plugins.configfiles.maven.job.MvnSettingsProvider') {
                     settingsConfigId(mavenContext.providedSettingsId)
@@ -394,20 +330,6 @@ class StepContext implements Context {
         }
     }
 
-    /**
-     * <com.g2one.hudson.grails.GrailsBuilder>
-     *     <targets/>
-     *     <name>(Default)</name>
-     *     <grailsWorkDir/>
-     *     <projectWorkDir/>
-     *     <projectBaseDir/>
-     *     <serverPort/>
-     *     <properties/>
-     *     <forceUpgrade>false</forceUpgrade>
-     *     <nonInteractive>true</nonInteractive>
-     *     <useWrapper>false</useWrapper>
-     * </com.g2one.hudson.grails.GrailsBuilder>
-     */
     void grails(@DslContext(GrailsContext) Closure grailsClosure) {
         grails null, false, grailsClosure
     }
@@ -416,15 +338,15 @@ class StepContext implements Context {
         grails targetsArg, false, grailsClosure
     }
 
+    @RequiresPlugin(id = 'grails')
     void grails(String targetsArg = null, boolean useWrapperArg = false,
                 @DslContext(GrailsContext) Closure grailsClosure = null) {
         GrailsContext grailsContext = new GrailsContext(
-            useWrapper: useWrapperArg
+                useWrapper: useWrapperArg
         )
         ContextHelper.executeInContext(grailsClosure, grailsContext)
 
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        Node grailsNode = nodeBuilder.'com.g2one.hudson.grails.GrailsBuilder' {
+        stepNodes << new NodeBuilder().'com.g2one.hudson.grails.GrailsBuilder' {
             targets targetsArg ?: grailsContext.targetsString
             name grailsContext.name
             grailsWorkDir grailsContext.grailsWorkDir
@@ -432,151 +354,81 @@ class StepContext implements Context {
             projectBaseDir grailsContext.projectBaseDir
             serverPort grailsContext.serverPort
             'properties' grailsContext.propertiesString
-            forceUpgrade grailsContext.forceUpgrade.toString()
-            nonInteractive grailsContext.nonInteractive.toString()
-            useWrapper grailsContext.useWrapper.toString()
+            forceUpgrade grailsContext.forceUpgrade
+            nonInteractive grailsContext.nonInteractive
+            useWrapper grailsContext.useWrapper
         }
-
-        stepNodes << grailsNode
     }
 
-    /**
-     * Upstream build that triggered this job
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     <filter>*ivy-locked.xml</filter>
-     *     <target>target/</target>
-     *     <selector class="hudson.plugins.copyartifact.TriggeredBuildSelector"/>
-     *     <flatten>true</flatten>
-     *     <optional>true</optional>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     *
-     * Latest successful build
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     ...
-     *     <selector class="hudson.plugins.copyartifact.StatusBuildSelector"/>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     *
-     * Latest saved build (marked "keep forever")
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     ...
-     *     <selector class="hudson.plugins.copyartifact.SavedBuildSelector"/>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     *
-     * Specified by permalink
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     ...
-     *     <selector class="hudson.plugins.copyartifact.PermalinkBuildSelector">
-     *         <id>lastBuild</id> <!-- Last Build-->
-     *         <id>lastStableBuild</id> <!-- Latest Stable Build -->
-     *     </selector>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     *
-     * Specific Build
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     ...
-     *     <selector class="hudson.plugins.copyartifact.SpecificBuildSelector">
-     *         <buildNumber>43</buildNumber>
-     *     </selector>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     *
-     * Copy from WORKSPACE of latest completed build
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     ...
-     *     <selector class="hudson.plugins.copyartifact.WorkspaceSelector"/>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     *
-     * Specified by build parameter
-     * <hudson.plugins.copyartifact.CopyArtifact>
-     *     ...
-     *     <selector class="hudson.plugins.copyartifact.ParameterizedBuildSelector">
-     *         <parameterName>BUILD_SELECTOR</parameterName>
-     *     </selector>
-     * </hudson.plugins.copyartifact.CopyArtifact>
-     */
+    @Deprecated
     void copyArtifacts(String jobName, String includeGlob,
-                       @DslContext(CopyArtifactContext) Closure copyArtifactClosure) {
+                       @DslContext(CopyArtifactSelectorContext) Closure copyArtifactClosure) {
         copyArtifacts(jobName, includeGlob, '', copyArtifactClosure)
     }
 
+    @Deprecated
     void copyArtifacts(String jobName, String includeGlob, String targetPath,
-                       @DslContext(CopyArtifactContext) Closure copyArtifactClosure) {
+                       @DslContext(CopyArtifactSelectorContext) Closure copyArtifactClosure) {
         copyArtifacts(jobName, includeGlob, targetPath, false, copyArtifactClosure)
     }
 
+    @Deprecated
     void copyArtifacts(String jobName, String includeGlob, String targetPath = '', boolean flattenFiles,
-                       @DslContext(CopyArtifactContext) Closure copyArtifactClosure) {
+                       @DslContext(CopyArtifactSelectorContext) Closure copyArtifactClosure) {
         copyArtifacts(jobName, includeGlob, targetPath, flattenFiles, false, copyArtifactClosure)
     }
 
+    @Deprecated
     void copyArtifacts(String jobName, String includeGlob, String targetPath = '', boolean flattenFiles,
                        boolean optionalAllowed,
-                       @DslContext(CopyArtifactContext) Closure copyArtifactClosure) {
-        jobManagement.requireMinimumPluginVersion('copyartifact', '1.26')
-
-        CopyArtifactContext copyArtifactContext = new CopyArtifactContext()
-        ContextHelper.executeInContext(copyArtifactClosure, copyArtifactContext)
-
-        if (!copyArtifactContext.selectedSelector) {
-            throw new IllegalArgumentException('A selector has to be select in the closure argument')
+                       @DslContext(CopyArtifactSelectorContext) Closure copyArtifactClosure) {
+        jobManagement.logDeprecationWarning()
+        copyArtifacts(jobName) {
+            delegate.includePatterns(includeGlob)
+            delegate.targetDirectory(targetPath)
+            delegate.flatten(flattenFiles)
+            delegate.optional(optionalAllowed)
+            delegate.buildSelector(copyArtifactClosure)
         }
-
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node copyArtifactNode = nodeBuilder.'hudson.plugins.copyartifact.CopyArtifact' {
-            project jobName
-            filter includeGlob
-            target targetPath ?: ''
-
-            selector(class: "hudson.plugins.copyartifact.${copyArtifactContext.selectedSelector}Selector") {
-                if (copyArtifactContext.selectedSelector == 'TriggeredBuild' && copyArtifactContext.fallback) {
-                    fallbackToLastSuccessful 'true'
-                }
-                if (copyArtifactContext.selectedSelector == 'StatusBuild' && copyArtifactContext.stable) {
-                    stable 'true'
-                }
-                if (copyArtifactContext.selectedSelector == 'PermalinkBuild') {
-                    id copyArtifactContext.permalinkName
-                }
-                if (copyArtifactContext.selectedSelector == 'SpecificBuild') {
-                    buildNumber copyArtifactContext.buildNumber
-                }
-                if (copyArtifactContext.selectedSelector == 'ParameterizedBuild') {
-                    parameterName copyArtifactContext.parameterName
-                }
-            }
-
-            if (flattenFiles) {
-                flatten 'true'
-            }
-            if (optionalAllowed) {
-                optional 'true'
-            }
-        }
-
-        stepNodes << copyArtifactNode
-
     }
 
     /**
-     * <org.jvnet.hudson.plugins.repositoryconnector.ArtifactResolver>
-     *     <targetDirectory>target</targetDirectory>
-     *     <failOnError>false</failOnError>
-     *     <enableRepoLogging>false</enableRepoLogging>
-     *     <snapshotUpdatePolicy>daily</snapshotUpdatePolicy>
-     *     <releaseUpdatePolicy>daily</releaseUpdatePolicy>
-     *     <snapshotChecksumPolicy>warn</snapshotChecksumPolicy>
-     *     <releaseChecksumPolicy>warn</releaseChecksumPolicy>
-     *     <artifacts>
-     *         <org.jvnet.hudson.plugins.repositoryconnector.Artifact>
-     *             <groupId>de.test.me</groupId>
-     *             <artifactId>myTestArtifact</artifactId>
-     *             <classifier/>
-     *             <version>RELEASE</version>
-     *             <extension>war</extension>
-     *             <targetFileName>myTestArtifact.war</targetFileName>
-     *         </org.jvnet.hudson.plugins.repositoryconnector.Artifact>
-     *     </artifacts>
-     * </org.jvnet.hudson.plugins.repositoryconnector.ArtifactResolver>
+     * @since 1.33
      */
+    @RequiresPlugin(id = 'copyartifact', minimumVersion = '1.26')
+    void copyArtifacts(String jobName, @DslContext(CopyArtifactContext) Closure copyArtifactClosure = null) {
+        CopyArtifactContext copyArtifactContext = new CopyArtifactContext(jobManagement)
+        ContextHelper.executeInContext(copyArtifactClosure, copyArtifactContext)
+
+        if (jobManagement.getPluginVersion('copyartifact')?.isOlderThan(new VersionNumber('1.31'))) {
+            jobManagement.logDeprecationWarning('support for Copy Artifact plugin versions 1.30 and earlier')
+        }
+
+        Node copyArtifactNode = new NodeBuilder().'hudson.plugins.copyartifact.CopyArtifact' {
+            project(jobName)
+            filter(copyArtifactContext.includePatterns.join(', '))
+            target(copyArtifactContext.targetDirectory ?: '')
+            if (copyArtifactContext.excludePatterns) {
+                excludes(copyArtifactContext.excludePatterns.join(', '))
+            }
+            if (copyArtifactContext.flatten) {
+                flatten(true)
+            }
+            if (copyArtifactContext.optional) {
+                optional(true)
+            }
+            if (!jobManagement.getPluginVersion('copyartifact')?.isOlderThan(new VersionNumber('1.29'))) {
+                doNotFingerprintArtifacts(!copyArtifactContext.fingerprint)
+            }
+        }
+        copyArtifactNode.append(copyArtifactContext.selectorContext.selector)
+        stepNodes << copyArtifactNode
+    }
+
+    /**
+     * @since 1.29
+     */
+    @RequiresPlugin(id = 'repository-connector')
     void resolveArtifacts(@DslContext(RepositoryConnectorContext) Closure repositoryConnectorClosure) {
         RepositoryConnectorContext context = new RepositoryConnectorContext()
         ContextHelper.executeInContext(repositoryConnectorClosure, context)
@@ -594,143 +446,21 @@ class StepContext implements Context {
     }
 
     /**
-     * phaseName will have to be provided in the closure
-     *
-     * <com.tikal.jenkins.plugins.multijob.MultiJobBuilder>
-     *   <phaseName>name-of-phase</phaseName>
-     *   <phaseJobs>
-     *     <com.tikal.jenkins.plugins.multijob.PhaseJobsConfig>
-     *       <jobName>job-in-phase</jobName>
-     *       <currParams>true</currParams>
-     *       <exposedSCM>false</exposedSCM>
-     *       <disableJob>false</disableJob>
-     *       <configs class="empty-list"/>
-     *       <killPhaseOnJobResultCondition>FAILURE</killPhaseOnJobResultCondition>
-     *     </com.tikal.jenkins.plugins.multijob.PhaseJobsConfig>
-     *   </phaseJobs>
-     *   <continuationCondition>COMPLETED</continuationCondition>
-     * </com.tikal.jenkins.plugins.multijob.MultiJobBuilder>
+     * @since 1.19
      */
-    void phase(@DslContext(PhaseContext) Closure phaseContext) {
-        phase(null, 'SUCCESSFUL', phaseContext)
-    }
-
-    void phase(String phaseName, @DslContext(PhaseContext) Closure phaseContext = null) {
-        phase(phaseName, 'SUCCESSFUL', phaseContext)
-    }
-
-    void phase(String name, String continuationConditionArg, @DslContext(PhaseContext) Closure phaseClosure) {
-        PhaseContext phaseContext = new PhaseContext(jobManagement, name, continuationConditionArg)
-        ContextHelper.executeInContext(phaseClosure, phaseContext)
-
-        Preconditions.checkArgument(phaseContext.phaseName as Boolean, 'A phase needs a name')
-        Preconditions.checkArgument(
-                VALID_CONTINUATION_CONDITIONS.contains(phaseContext.continuationCondition),
-                "Continuation Condition needs to be one of these values: ${VALID_CONTINUATION_CONDITIONS.join(', ')}"
-        )
-
-        VersionNumber multiJobPluginVersion = jobManagement.getPluginVersion('jenkins-multijob-plugin')
-
-        stepNodes << new NodeBuilder().'com.tikal.jenkins.plugins.multijob.MultiJobBuilder' {
-            phaseName phaseContext.phaseName
-            continuationCondition phaseContext.continuationCondition
-            phaseJobs {
-                phaseContext.jobsInPhase.each { PhaseJobContext jobInPhase ->
-                    Node phaseJobNode = 'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig' {
-                        jobName jobInPhase.jobName
-                        currParams jobInPhase.currentJobParameters
-                        exposedSCM jobInPhase.exposedScm
-                        if (multiJobPluginVersion?.isNewerThan(new VersionNumber('1.10'))) {
-                            disableJob jobInPhase.disableJob
-                            killPhaseOnJobResultCondition jobInPhase.killPhaseCondition
-                        }
-                        if (jobInPhase.hasConfig()) {
-                            configs(jobInPhase.configAsNode().children())
-                        } else {
-                            configs('class': 'java.util.Collections$EmptyList')
-                        }
-                    }
-
-                    if (jobInPhase.configureClosure) {
-                        WithXmlAction action = new WithXmlAction(jobInPhase.configureClosure)
-                        action.execute(phaseJobNode)
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * <dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder>
-     *     <projects>project-A,project-B</projects>
-     *     <warningOnly>false</warningOnly>
-     * </dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder>
-     */
+    @RequiresPlugin(id = 'prereq-buildstep')
     void prerequisite(String projectList = '', boolean warningOnlyBool = false) {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        Node preReqNode = nodeBuilder.'dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder' {
-             // Important that there are no spaces for comma delimited values, plugin doesn't trim, so we will
+        stepNodes << new NodeBuilder().'dk.hlyh.ciplugins.prereqbuildstep.PrereqBuilder' {
+            // Important that there are no spaces for comma delimited values, plugin doesn't trim, so we will
             projects(projectList.tokenize(',')*.trim().join(','))
             warningOnly(warningOnlyBool)
         }
-        stepNodes << preReqNode
     }
 
     /**
-     * <jenkins.plugins.publish__over__ssh.BapSshBuilderPlugin>
-     *     <delegate>
-     *         <consolePrefix>SSH: </consolePrefix>
-     *         <delegate>
-     *             <publishers>
-     *                 <jenkins.plugins.publish__over__ssh.BapSshPublisher>
-     *                     <configName>my-server</configName>
-     *                     <verbose>false</verbose>
-     *                     <transfers>
-     *                         <jenkins.plugins.publish__over__ssh.BapSshTransfer>
-     *                             <remoteDirectory></remoteDirectory>
-     *                             <sourceFiles></sourceFiles>
-     *                             <excludes></excludes>
-     *                             <removePrefix></removePrefix>
-     *                             <remoteDirectorySDF>false</remoteDirectorySDF>
-     *                             <flatten>false</flatten>
-     *                             <cleanRemote>false</cleanRemote>
-     *                             <noDefaultExcludes>false</noDefaultExcludes>
-     *                             <makeEmptyDirs>false</makeEmptyDirs>
-     *                             <patternSeparator>[, ]+</patternSeparator>
-     *                             <execCommand></execCommand>
-     *                             <execTimeout>120000</execTimeout>
-     *                             <usePty>false</usePty>
-     *                         </jenkins.plugins.publish__over__ssh.BapSshTransfer>
-     *                     </transfers>
-     *                     <useWorkspaceInPromotion>false</useWorkspaceInPromotion>
-     *                     <usePromotionTimestamp>false</usePromotionTimestamp>
-     *                     <retry class="jenkins.plugins.publish_over_ssh.BapSshRetry">
-     *                         <retries>10</retries>
-     *                         <retryDelay>10000</retryDelay>
-     *                     </retry>
-     *                     <credentials class="jenkins.plugins.publish_over_ssh.BapSshCredentials">
-     *                         <secretPassphrase/>
-     *                         <key/>
-     *                         <keyPath>path01</keyPath>
-     *                         <username>user01</username>
-     *                     </credentials>
-     *                     <label class="jenkins.plugins.publish_over_ssh.BapSshPublisherLabel">
-     *                         <label>server-01</label>
-     *                     </label>
-     *                 </jenkins.plugins.publish__over__ssh.BapSshPublisher>
-     *             </publishers>
-     *             <continueOnError>false</continueOnError>
-     *             <failOnError>false</failOnError>
-     *             <alwaysPublishFromMaster>false</alwaysPublishFromMaster>
-     *             <hostConfigurationAccess class="jenkins.plugins.publish_over_ssh.BapSshPublisherPlugin"
-     *                                      reference="../.."/>
-     *             <paramPublish class="jenkins.plugins.publish_over_ssh.BapSshParamPublish">
-     *                 <parameterName>PARAMETER</parameterName>
-     *             </paramPublish>
-     *         </delegate>
-     *     </delegate>
-     * </jenkins.plugins.publish__over__ssh.BapSshBuilderPlugin>
+     * @since 1.28
      */
+    @RequiresPlugin(id = 'publish-over-ssh')
     void publishOverSsh(@DslContext(PublishOverSshContext) Closure publishOverSshClosure) {
         PublishOverSshContext publishOverSshContext = new PublishOverSshContext()
         ContextHelper.executeInContext(publishOverSshClosure, publishOverSshContext)
@@ -740,197 +470,56 @@ class StepContext implements Context {
         stepNodes << new NodeBuilder().'jenkins.plugins.publish__over__ssh.BapSshBuilderPlugin' {
             delegate.delegate {
                 consolePrefix('SSH: ')
-                delegate.delegate {
-                    publishers {
-                        publishOverSshContext.servers.each { server ->
-                            'jenkins.plugins.publish__over__ssh.BapSshPublisher' {
-                                configName(server.name)
-                                verbose(server.verbose)
-                                transfers {
-                                    server.transferSets.each { transferSet ->
-                                        'jenkins.plugins.publish__over__ssh.BapSshTransfer' {
-                                            remoteDirectory(transferSet.remoteDirectory ?: '')
-                                            sourceFiles(transferSet.sourceFiles ?: '')
-                                            excludes(transferSet.excludeFiles ?: '')
-                                            removePrefix(transferSet.removePrefix ?: '')
-                                            remoteDirectorySDF(transferSet.remoteDirIsDateFormat)
-                                            flatten(transferSet.flattenFiles)
-                                            cleanRemote(false)
-                                            noDefaultExcludes(transferSet.noDefaultExcludes)
-                                            makeEmptyDirs(transferSet.makeEmptyDirs)
-                                            patternSeparator(transferSet.patternSeparator)
-                                            execCommand(transferSet.execCommand ?: '')
-                                            execTimeout(transferSet.execTimeout)
-                                            usePty(transferSet.execInPty)
-                                        }
-                                    }
-                                }
-                                useWorkspaceInPromotion(false)
-                                usePromotionTimestamp(false)
-                                if (server.retry) {
-                                    retry(class: 'jenkins.plugins.publish_over_ssh.BapSshRetry') {
-                                        retries(server.retries)
-                                        retryDelay(server.delay)
-                                    }
-                                }
-                                if (server.credentials) {
-                                    credentials(class: 'jenkins.plugins.publish_over_ssh.BapSshCredentials') {
-                                        secretPassphrase('')
-                                        key(server.credentials.key ?: '')
-                                        keyPath(server.credentials.pathToKey ?: '')
-                                        username(server.credentials.username)
-                                    }
-                                }
-                                if (server.label) {
-                                    label(class: 'jenkins.plugins.publish_over_ssh.BapSshPublisherLabel') {
-                                        label(server.label)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    continueOnError(publishOverSshContext.continueOnError)
-                    failOnError(publishOverSshContext.failOnError)
-                    alwaysPublishFromMaster(publishOverSshContext.alwaysPublishFromMaster)
-                    hostConfigurationAccess(
-                            class: 'jenkins.plugins.publish_over_ssh.BapSshPublisherPlugin',
-                            reference: '../..',
-                    )
-                    if (publishOverSshContext.parameterName) {
-                        paramPublish(class: 'jenkins.plugins.publish_over_ssh.BapSshParamPublish') {
-                            parameterName(publishOverSshContext.parameterName)
-                        }
-                    }
-                }
+                currentNode.append(publishOverSshContext.node)
             }
         }
     }
 
     /**
-     * <hudson.plugins.parameterizedtrigger.TriggerBuilder>
-     *     <configs>
-     *         <hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
-     *             <projects>one-project,another-project</projects>
-     *             <condition>ALWAYS</condition>
-     *             <triggerWithNoParameters>false</triggerWithNoParameters>
-     *             <configs>
-     *                 <hudson.plugins.parameterizedtrigger.CurrentBuildParameters/>
-     *                 <hudson.plugins.parameterizedtrigger.FileBuildParameters>
-     *                     <propertiesFile>some.properties</propertiesFile>
-     *                 </hudson.plugins.parameterizedtrigger.FileBuildParameters>
-     *                 <hudson.plugins.git.GitRevisionBuildParameters>
-     *                     <combineQueuedCommits>false</combineQueuedCommits>
-     *                 </hudson.plugins.git.GitRevisionBuildParameters>
-     *                 <hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
-     *                     <properties>
-     *                         prop1=value1
-     *                         prop2=value2
-     *                     </properties>
-     *                 </hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
-     *                 <hudson.plugins.parameterizedtrigger.matrix.MatrixSubsetBuildParameters>
-     *                     <filter>label=="${TARGET}"</filter>
-     *                 </hudson.plugins.parameterizedtrigger.matrix.MatrixSubsetBuildParameters>
-     *                 <hudson.plugins.parameterizedtrigger.SubversionRevisionBuildParameters/>
-     *             </configs>
-     *             <block>
-     *                 <unstableThreshold>
-     *                     <name>UNSTABLE</name>
-     *                     <ordinal>1</ordinal>
-     *                     <color>YELLOW</color>
-     *                 </unstableThreshold>
-     *                 <buildStepFailureThreshold>
-     *                     <name>FAILURE</name>
-     *                     <ordinal>2</ordinal>
-     *                     <color>RED</color>
-     *                 </buildStepFailureThreshold>
-     *                 <failureThreshold>
-     *                     <name>FAILURE</name>
-     *                     <ordinal>2</ordinal>
-     *                     <color>RED</color>
-     *                 </failureThreshold>
-     *             </block>
-     *             <buildAllNodesWithLabel>false</buildAllNodesWithLabel>
-     *         </hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
-     *     </configs>
-     * </hudson.plugins.parameterizedtrigger.TriggerBuilder>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'parameterized-trigger')
     void downstreamParameterized(@DslContext(DownstreamContext) Closure downstreamClosure) {
-        DownstreamContext downstreamContext = new DownstreamContext()
+        DownstreamContext downstreamContext = new DownstreamContext(jobManagement)
         ContextHelper.executeInContext(downstreamClosure, downstreamContext)
 
-        Node stepNode = downstreamContext.createDownstreamNode(true)
-        stepNodes << stepNode
+        stepNodes << downstreamContext.createDownstreamNode(true)
     }
 
     /**
-     * <org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder>
-     *     <condition class="org.jenkins_ci.plugins.run_condition.core.StringsMatchCondition">
-     *         <arg1/><arg2/>
-     *         <ignoreCase>false</ignoreCase>
-     *     </condition>
-     *     <buildStep class="hudson.tasks.Shell">
-     *         <command/>
-     *     </buildStep>
-     *     <runner class="org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail"/>
-     * </org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'conditional-buildstep')
     void conditionalSteps(@DslContext(ConditionalStepsContext) Closure conditionalStepsClosure) {
-        ConditionalStepsContext conditionalStepsContext = new ConditionalStepsContext(jobManagement)
+        ConditionalStepsContext conditionalStepsContext = new ConditionalStepsContext(jobManagement, item)
         ContextHelper.executeInContext(conditionalStepsClosure, conditionalStepsContext)
 
-        if (conditionalStepsContext.stepNodes.size() > 1) {
-            stepNodes << conditionalStepsContext.createMultiStepNode()
-        } else {
-            stepNodes << conditionalStepsContext.createSingleStepNode()
+        stepNodes << new NodeBuilder().'org.jenkinsci.plugins.conditionalbuildstep.ConditionalBuilder' {
+            runCondition(class: conditionalStepsContext.runCondition.conditionClass) {
+                conditionalStepsContext.runCondition.addArgs(delegate)
+            }
+            runner(class: conditionalStepsContext.runnerClass)
+            conditionalbuilders(conditionalStepsContext.stepNodes)
         }
     }
 
     /**
-     * <EnvInjectBuilder>
-     *     <info>
-     *         <propertiesFilePath>some.properties</propertiesFilePath>
-     *         <propertiesContent>REV=15</propertiesContent>
-     *     </info>
-     * </EnvInjectBuilder>
+     * @since 1.21
      */
+    @RequiresPlugin(id = 'envinject')
     void environmentVariables(@DslContext(StepEnvironmentVariableContext) Closure envClosure) {
-        StepEnvironmentVariableContext envContext = new StepEnvironmentVariableContext()
+        StepEnvironmentVariableContext envContext = new StepEnvironmentVariableContext(jobManagement)
         ContextHelper.executeInContext(envClosure, envContext)
 
-        Node envNode = new NodeBuilder().'EnvInjectBuilder' {
+        stepNodes << new NodeBuilder().'EnvInjectBuilder' {
             envContext.addInfoToBuilder(delegate)
         }
-
-        stepNodes << envNode
     }
 
     /**
-     * <org.jenkinsci.plugins.ParameterizedRemoteTrigger.RemoteBuildConfiguration>
-     *     <token/>
-     *     <remoteJenkinsName>ci.acme.org</remoteJenkinsName>
-     *     <job>CM7.5-SwingEditor-UITests-ALL</job>
-     *     <shouldNotFailBuild>false</shouldNotFailBuild>
-     *     <pollInterval>10</pollInterval>
-     *     <preventRemoteBuildQueue>false</preventRemoteBuildQueue>
-     *     <blockBuildUntilComplete>false</blockBuildUntilComplete>
-     *     <parameters>BRANCH_OR_TAG=master-7.5 CMS_VERSION=$PIPELINE_VERSION</parameters>
-     *     <parameterList>
-     *         <string>BRANCH_OR_TAG=master-7.5</string>
-     *         <string>CMS_VERSION=$PIPELINE_VERSION</string>
-     *     </parameterList>
-     *     <overrideAuth>false</overrideAuth>
-     *     <auth>
-     *         <org.jenkinsci.plugins.ParameterizedRemoteTrigger.Auth>
-     *             <NONE>none</NONE>
-     *             <API__TOKEN>apiToken</API__TOKEN>
-     *             <CREDENTIALS__PLUGIN>credentialsPlugin</CREDENTIALS__PLUGIN>
-     *         </org.jenkinsci.plugins.ParameterizedRemoteTrigger.Auth>
-     *     </auth>
-     *     <loadParamsFromFile>false</loadParamsFromFile>
-     *     <parameterFile/>
-     *     <queryString/>
-     * </org.jenkinsci.plugins.ParameterizedRemoteTrigger.RemoteBuildConfiguration>
+     * @since 1.22
      */
+    @RequiresPlugin(id = 'Parameterized-Remote-Trigger')
     void remoteTrigger(String remoteJenkins, String jobName,
                        @DslContext(ParameterizedRemoteTriggerContext) Closure closure = null) {
         Preconditions.checkArgument(!isNullOrEmpty(remoteJenkins), 'remoteJenkins must be specified')
@@ -974,12 +563,11 @@ class StepContext implements Context {
     }
 
     /**
-     * <org.jvnet.hudson.plugins.exclusion.CriticalBlockStart/>
-     * ...
-     * <org.jvnet.hudson.plugins.exclusion.CriticalBlockEnd/>
+     * @since 1.24
      */
+    @RequiresPlugin(id = 'Exclusion')
     void criticalBlock(@DslContext(StepContext) Closure closure) {
-        StepContext stepContext = new StepContext(jobManagement)
+        StepContext stepContext = new StepContext(jobManagement, item)
         ContextHelper.executeInContext(closure, stepContext)
 
         stepNodes << new NodeBuilder().'org.jvnet.hudson.plugins.exclusion.CriticalBlockStart'()
@@ -988,20 +576,16 @@ class StepContext implements Context {
     }
 
     /**
-     * <hudson.plugins.rake.Rake>
-     *     <rakeInstallation>(Default)</rakeInstallation>
-     *     <rakeFile/>
-     *     <rakeLibDir/>
-     *     <rakeWorkingDir/>
-     *     <tasks/>
-     *     <silent>false</silent>
-     *     <bundleExec>false</bundleExec>
-     * </hudson.plugins.rake.Rake>
+     * @since 1.25
      */
     void rake(@DslContext(RakeContext) Closure rakeClosure = null) {
         rake(null, rakeClosure)
     }
 
+    /**
+     * @since 1.25
+     */
+    @RequiresPlugin(id = 'rake')
     void rake(String tasksArg, @DslContext(RakeContext) Closure rakeClosure = null) {
         RakeContext rakeContext = new RakeContext()
 
@@ -1023,15 +607,7 @@ class StepContext implements Context {
     }
 
     /**
-     * <org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer>
-     *     <buildStep class="org.jenkinsci.plugins.vsphere.builders.PowerOff">
-     *         <vm>test</vm>
-     *         <evenIfSuspended>false</evenIfSuspended>
-     *         <shutdownGracefully>false</shutdownGracefully>
-     *     </buildStep>
-     *     <serverName>test</serverName>
-     *     <serverHash>320615527</serverHash>
-     * </org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer>
+     * @since 1.25
      */
     void vSpherePowerOff(String server, String vm) {
         vSphereBuildStep(server, 'PowerOff') {
@@ -1042,14 +618,7 @@ class StepContext implements Context {
     }
 
     /**
-     * <org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer>
-     *     <buildStep class="org.jenkinsci.plugins.vsphere.builders.PowerOn">
-     *         <vm>test</vm>
-     *         <timeoutInSeconds>180</timeoutInSeconds>
-     *     </buildStep>
-     *     <serverName>test</serverName>
-     *     <serverHash>320615527</serverHash>
-     * </org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer>
+     * @since 1.25
      */
     void vSpherePowerOn(String server, String vm) {
         vSphereBuildStep(server, 'PowerOn') {
@@ -1059,14 +628,7 @@ class StepContext implements Context {
     }
 
     /**
-     * <org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer>
-     *     <buildStep class="org.jenkinsci.plugins.vsphere.builders.PowerOm">
-     *         <vm>test</vm>
-     *         <timeoutInSeconds>180</timeoutInSeconds>
-     *     </buildStep>
-     *     <serverName>test</serverName>
-     *     <serverHash>320615527</serverHash>
-     * </org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer>
+     * @since 1.25
      */
     void vSphereRevertToSnapshot(String server, String vm, String snapshot) {
         vSphereBuildStep(server, 'RevertToSnapshot') {
@@ -1075,6 +637,7 @@ class StepContext implements Context {
         }
     }
 
+    @RequiresPlugin(id = 'vsphere-cloud')
     private vSphereBuildStep(String server, String builder, Closure configuration) {
         int hash = Preconditions.checkNotNull(
                 jobManagement.getVSphereCloudHash(server),
@@ -1088,14 +651,9 @@ class StepContext implements Context {
     }
 
     /**
-     * <jenkins.plugins.http__request.HttpRequest>
-     *     <url>https://rtfm.freelancer.com</url>
-     *     <httpMode>POST</httpMode>
-     *     <authentication>RTFM</authentication>
-     *     <returnCodeBuildRelevant>true</returnCodeBuildRelevant>
-     *     <logResponseBody>false</logResponseBody>
-     * </jenkins.plugins.http__request.HttpRequest>
+     * @since 1.28
      */
+    @RequiresPlugin(id = 'http_request')
     void httpRequest(String requestUrl, @DslContext(HttpRequestContext) Closure closure = null) {
         HttpRequestContext context = new HttpRequestContext()
         ContextHelper.executeInContext(closure, context)
@@ -1114,6 +672,36 @@ class StepContext implements Context {
             if (context.logResponseBody != null) {
                 logResponseBody(context.logResponseBody)
             }
+        }
+    }
+
+    /**
+     * @since 1.31
+     */
+    @RequiresPlugin(id = 'nodejs')
+    void nodejsCommand(String commandScript, String installation) {
+        stepNodes << new NodeBuilder().'jenkins.plugins.nodejs.NodeJsCommandInterpreter' {
+            command(commandScript)
+            nodeJSInstallationName(installation)
+        }
+    }
+
+    /**
+     * @since 1.31
+     */
+    @RequiresPlugin(id = 'debian-package-builder', minimumVersion = '1.6.6')
+    void debianPackage(String path, @DslContext(DebianContext) Closure closure = null) {
+        Preconditions.checkArgument(!isNullOrEmpty(path), 'path must be specified')
+
+        DebianContext context = new DebianContext()
+        ContextHelper.executeInContext(closure, context)
+
+        stepNodes << new NodeBuilder().'ru.yandex.jenkins.plugins.debuilder.DebianPackageBuilder' {
+            pathToDebian(path)
+            nextVersion(context.nextVersion ?: '')
+            generateChangelog(context.generateChangelog)
+            signPackage(context.signPackage)
+            buildEvenWhenThereAreNoChanges(context.alwaysBuild)
         }
     }
 }

@@ -1,92 +1,50 @@
 package javaposse.jobdsl.dsl.helpers.step
 
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
+import javaposse.jobdsl.dsl.ContextHelper
+import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 
-class CopyArtifactContext implements Context {
-    String selectedSelector
-    boolean fallback
-    boolean stable
-    String permalinkName
-    String buildNumber
-    String parameterName
+class CopyArtifactContext extends AbstractContext {
+    final List<String> includePatterns = []
+    final List<String> excludePatterns = []
+    String targetDirectory
+    boolean flatten
+    boolean optional
+    boolean fingerprint = true
+    final CopyArtifactSelectorContext selectorContext = new CopyArtifactSelectorContext()
 
-    private void ensureFirst() {
-        if (selectedSelector != null) {
-            throw new IllegalStateException('Only one selector can be chosen')
-        }
-    }
-    /**
-     * Upstream build that triggered this job
-     * @arg fallback Use "Last successful build" as fallback
-     * @return
-     */
-    void upstreamBuild(boolean fallback = false) {
-        ensureFirst()
-        this.fallback = fallback
-        selectedSelector = 'TriggeredBuild'
+    CopyArtifactContext(JobManagement jobManagement) {
+        super(jobManagement)
     }
 
-    /**
-     * Latest successful build
-     * @return
-     */
-    void latestSuccessful(boolean stable = false) {
-        ensureFirst()
-        this.stable = stable
-        selectedSelector = 'StatusBuild'
-    }
-    /**
-     * Latest saved build (marked "keep forever")
-     * @return
-     */
-    void latestSaved() {
-        ensureFirst()
-        selectedSelector = 'SavedBuild'
-    }
-    /**
-     * Specified by permalink
-     * @param linkName Values like lastBuild, lastStableBuild
-     * @return
-     */
-    void permalink(String linkName) {
-        ensureFirst()
-        selectedSelector = 'PermalinkBuild'
-        permalinkName = linkName
+    void includePatterns(String... includePatterns) {
+        this.includePatterns.addAll(includePatterns)
     }
 
-    /**
-     * Specific Build
-     * @param buildNumber
-     * @return
-     */
-    void buildNumber(int buildNumber) {
-        this.buildNumber(Integer.toString(buildNumber))
-
+    @RequiresPlugin(id = 'copyartifact', minimumVersion = '1.31')
+    void excludePatterns(String... excludePatterns) {
+        this.excludePatterns.addAll(excludePatterns)
     }
 
-    void buildNumber(String buildNumber) {
-        ensureFirst()
-        selectedSelector = 'SpecificBuild'
-        this.buildNumber = buildNumber
+    void targetDirectory(String targetDirectory) {
+        this.targetDirectory = targetDirectory
     }
 
-    /**
-     * Copy from WORKSPACE of latest completed build
-     * @return
-     */
-    void workspace() {
-        ensureFirst()
-        selectedSelector = 'Workspace'
+    void flatten(boolean flatten = true) {
+        this.flatten = flatten
     }
 
-    /**
-     * Specified by build parameter
-     * @param parameterName
-     * @return
-     */
-    void buildParameter(String parameterName) {
-        ensureFirst()
-        selectedSelector = 'ParameterizedBuild'
-        this.parameterName = parameterName
+    void optional(boolean optional = true) {
+        this.optional = optional
+    }
+
+    @RequiresPlugin(id = 'copyartifact', minimumVersion = '1.29')
+    void fingerprintArtifacts(boolean fingerprint = true) {
+        this.fingerprint = fingerprint
+    }
+
+    void buildSelector(@javaposse.jobdsl.dsl.DslContext(CopyArtifactSelectorContext) Closure selectorClosure) {
+        ContextHelper.executeInContext(selectorClosure, selectorContext)
     }
 }

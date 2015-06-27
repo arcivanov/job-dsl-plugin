@@ -1,5 +1,6 @@
 package javaposse.jobdsl.dsl.views
 
+import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.views.jobfilter.RegexMatchValue
 import javaposse.jobdsl.dsl.views.jobfilter.Status
 import spock.lang.Specification
@@ -15,7 +16,8 @@ import static org.custommonkey.xmlunit.XMLUnit.compareXML
 import static org.custommonkey.xmlunit.XMLUnit.setIgnoreWhitespace
 
 class ListViewSpec extends Specification {
-    ListView view = new ListView()
+    JobManagement jobManagement = Mock(JobManagement)
+    ListView view = new ListView(jobManagement)
 
     def 'defaults'() {
         when:
@@ -203,12 +205,14 @@ class ListViewSpec extends Specification {
             lastDuration()
             buildButton()
             claim()
+            lastBuildNode()
+            categorizedJob()
         }
 
         then:
         Node root = view.node
         root.columns.size() == 1
-        root.columns[0].value().size() == 8
+        root.columns[0].value().size() == 10
         root.columns[0].value()[0].name() == 'hudson.views.StatusColumn'
         root.columns[0].value()[1].name() == 'hudson.views.WeatherColumn'
         root.columns[0].value()[2].name() == 'hudson.views.JobColumn'
@@ -217,6 +221,11 @@ class ListViewSpec extends Specification {
         root.columns[0].value()[5].name() == 'hudson.views.LastDurationColumn'
         root.columns[0].value()[6].name() == 'hudson.views.BuildButtonColumn'
         root.columns[0].value()[7].name() == 'hudson.plugins.claim.ClaimColumn'
+        root.columns[0].value()[8].name() == 'org.jenkins.plugins.column.LastBuildNodeColumn'
+        root.columns[0].value()[9].name() == 'org.jenkinsci.plugins.categorizedview.IndentedJobColumn'
+        1 * jobManagement.requireMinimumPluginVersion('build-node-column', '0.1')
+        1 * jobManagement.requireMinimumPluginVersion('categorized-view', '1.8')
+        1 * jobManagement.requirePlugin('claim')
     }
 
     def 'call columns twice'() {
@@ -247,6 +256,35 @@ class ListViewSpec extends Specification {
         root.columns.size() == 1
         root.columns[0].value().size() == 1
         root.columns[0].value()[0].name() == 'jenkins.plugins.extracolumns.LastBuildConsoleColumn'
+        1 * jobManagement.requirePlugin('extra-columns')
+    }
+
+    def 'configureProject column'() {
+        when:
+        view.columns {
+            configureProject()
+        }
+
+        then:
+        Node root = view.node
+        root.columns.size() == 1
+        root.columns[0].value().size() == 1
+        root.columns[0].value()[0].name() == 'jenkins.plugins.extracolumns.ConfigureProjectColumn'
+        1 * jobManagement.requirePlugin('extra-columns')
+    }
+
+    def 'robotResults column'() {
+        when:
+        view.columns {
+            robotResults()
+        }
+
+        then:
+        Node root = view.node
+        root.columns.size() == 1
+        root.columns[0].value().size() == 1
+        root.columns[0].value()[0].name() == 'hudson.plugins.robot.view.RobotListViewColumn'
+        1 * jobManagement.requireMinimumPluginVersion('robot', '1.6.0')
     }
 
     def 'statusFilter'(Closure filter, Map children) {
@@ -346,6 +384,30 @@ class ListViewSpec extends Specification {
         where:
         regexType  || regexString
         RegexMatchValue.NAME | '.*'
+    }
+
+    def 'recurse folders'() {
+        when:
+        view.recurse()
+
+        then:
+        Node root = view.node
+        root.recurse[0].text() == 'true'
+
+    }
+
+    def 'customIcon column'() {
+        when:
+        view.columns {
+            customIcon()
+        }
+
+        then:
+        Node root = view.node
+        root.columns.size() == 1
+        root.columns[0].value().size() == 1
+        root.columns[0].value()[0].name() == 'jenkins.plugins.jobicon.CustomIconColumn'
+        1 * jobManagement.requireMinimumPluginVersion('custom-job-icon', '0.2')
     }
 
     protected String getDefaultXml() {

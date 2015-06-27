@@ -1,14 +1,12 @@
 package javaposse.jobdsl.dsl
 
-abstract class Item implements Context {
-    protected final JobManagement jobManagement
-
+abstract class Item extends AbstractContext {
     String name
 
     List<WithXmlAction> withXmlActions = []
 
     protected Item(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+        super(jobManagement)
     }
 
     @Deprecated
@@ -27,7 +25,6 @@ abstract class Item implements Context {
     /**
      * Postpone all xml processing until someone actually asks for the xml. That lets us execute everything in order,
      * even if the user didn't specify them in order.
-     * @return
      */
     String getXml() {
         Writer xmlOutput = new StringWriter()

@@ -25,8 +25,17 @@ import javaposse.jobdsl.dsl.DslScriptLoader;
 import javaposse.jobdsl.dsl.GeneratedConfigFile;
 import javaposse.jobdsl.dsl.GeneratedItems;
 import javaposse.jobdsl.dsl.GeneratedJob;
+import javaposse.jobdsl.dsl.GeneratedUserContent;
 import javaposse.jobdsl.dsl.GeneratedView;
 import javaposse.jobdsl.dsl.ScriptRequest;
+import javaposse.jobdsl.plugin.actions.GeneratedConfigFilesAction;
+import javaposse.jobdsl.plugin.actions.GeneratedConfigFilesBuildAction;
+import javaposse.jobdsl.plugin.actions.GeneratedJobsAction;
+import javaposse.jobdsl.plugin.actions.GeneratedJobsBuildAction;
+import javaposse.jobdsl.plugin.actions.GeneratedUserContentsAction;
+import javaposse.jobdsl.plugin.actions.GeneratedUserContentsBuildAction;
+import javaposse.jobdsl.plugin.actions.GeneratedViewsAction;
+import javaposse.jobdsl.plugin.actions.GeneratedViewsBuildAction;
 import jenkins.model.Jenkins;
 import org.apache.commons.io.FilenameUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -41,6 +50,7 @@ import java.util.logging.Logger;
 
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
+import static javaposse.jobdsl.plugin.actions.GeneratedObjectsAction.extractGeneratedObjects;
 
 /**
  * This Builder keeps a list of job DSL scripts, and when prompted, executes these to create /
@@ -184,7 +194,8 @@ public class ExecuteDslScripts extends Builder {
         return asList(
                 new GeneratedJobsAction(project),
                 new GeneratedViewsAction(project),
-                new GeneratedConfigFilesAction(project)
+                new GeneratedConfigFilesAction(project),
+                new GeneratedUserContentsAction(project)
         );
     }
 
@@ -211,6 +222,7 @@ public class ExecuteDslScripts extends Builder {
                 Set<GeneratedJob> freshJobs = Sets.newLinkedHashSet();
                 Set<GeneratedView> freshViews = Sets.newLinkedHashSet();
                 Set<GeneratedConfigFile> freshConfigFiles = Sets.newLinkedHashSet();
+                Set<GeneratedUserContent> freshUserContents = Sets.newLinkedHashSet();
                 for (ScriptRequest request : scriptRequests) {
                     LOGGER.log(Level.FINE, String.format("Request for %s", request.getLocation()));
 
@@ -218,6 +230,7 @@ public class ExecuteDslScripts extends Builder {
                     freshJobs.addAll(generatedItems.getJobs());
                     freshViews.addAll(generatedItems.getViews());
                     freshConfigFiles.addAll(generatedItems.getConfigFiles());
+                    freshUserContents.addAll(generatedItems.getUserContents());
                 }
 
                 if (simulate) {
@@ -227,11 +240,13 @@ public class ExecuteDslScripts extends Builder {
                 updateGeneratedJobs(build, listener, freshJobs);
                 updateGeneratedViews(build, listener, freshViews);
                 updateGeneratedConfigFiles(build, listener, freshConfigFiles);
+                updateGeneratedUserContents(build, listener, freshUserContents);
 
                 // Save onto Builder, which belongs to a Project.
                 build.addAction(new GeneratedJobsBuildAction(freshJobs, getLookupStrategy()));
                 build.addAction(new GeneratedViewsBuildAction(freshViews, getLookupStrategy()));
                 build.addAction(new GeneratedConfigFilesBuildAction(freshConfigFiles));
+                build.addAction(new GeneratedUserContentsBuildAction(freshUserContents));
 
                 // Hint that our new jobs might have really shaken things up
                 Jenkins.getInstance().rebuildDependencyGraph();
@@ -255,7 +270,7 @@ public class ExecuteDslScripts extends Builder {
         AbstractProject<?, ?> seedJob = build.getProject();
 
         Set<String> freshTemplates = getTemplates(freshJobs);
-        Set<String> existingTemplates = getTemplates(extractGeneratedJobs(seedJob));
+        Set<String> existingTemplates = getTemplates(extractGeneratedObjects(seedJob, GeneratedJobsAction.class));
         Set<String> newTemplates = Sets.difference(freshTemplates, existingTemplates);
         Set<String> removedTemplates = Sets.difference(existingTemplates, freshTemplates);
 
@@ -313,7 +328,7 @@ public class ExecuteDslScripts extends Builder {
     private void updateGeneratedJobs(final AbstractBuild<?, ?> build, BuildListener listener,
                                      Set<GeneratedJob> freshJobs) throws IOException {
         // Update Project
-        Set<GeneratedJob> generatedJobs = extractGeneratedJobs(build.getProject());
+        Set<GeneratedJob> generatedJobs = extractGeneratedObjects(build.getProject(), GeneratedJobsAction.class);
         Set<GeneratedJob> added = Sets.difference(freshJobs, generatedJobs);
         Set<GeneratedJob> existing = Sets.intersection(generatedJobs, freshJobs);
         Set<GeneratedJob> removed = Sets.difference(generatedJobs, freshJobs);
@@ -384,18 +399,9 @@ public class ExecuteDslScripts extends Builder {
         }
     }
 
-    private Set<GeneratedJob> extractGeneratedJobs(AbstractProject project) {
-        GeneratedJobsAction gja = project.getAction(GeneratedJobsAction.class);
-        if (gja == null) {
-            return Sets.newLinkedHashSet();
-        } else {
-            return gja.findLastGeneratedJobs();
-        }
-    }
-
     private void updateGeneratedViews(AbstractBuild<?, ?> build, BuildListener listener,
                                       Set<GeneratedView> freshViews) throws IOException {
-        Set<GeneratedView> generatedViews = extractGeneratedViews(build.getProject());
+        Set<GeneratedView> generatedViews = extractGeneratedObjects(build.getProject(), GeneratedViewsAction.class);
         Set<GeneratedView> added = Sets.difference(freshViews, generatedViews);
         Set<GeneratedView> existing = Sets.intersection(generatedViews, freshViews);
         Set<GeneratedView> removed = Sets.difference(generatedViews, freshViews);
@@ -409,31 +415,23 @@ public class ExecuteDslScripts extends Builder {
             for (GeneratedView removedView : removed) {
                 String viewName = removedView.getName();
                 ItemGroup parent = getLookupStrategy().getParent(build.getProject(), viewName);
-                View view = null;
                 if (parent instanceof ViewGroup) {
-                    view = ((ViewGroup) parent).getView(FilenameUtils.getName(viewName));
+                    View view = ((ViewGroup) parent).getView(FilenameUtils.getName(viewName));
+                    if (view != null) {
+                        ((ViewGroup) parent).deleteView(view);
+                    }
+                } else if (parent == null) {
+                    LOGGER.log(Level.FINE, "Parent ViewGroup seems to have been already deleted");
                 } else {
                     LOGGER.log(Level.WARNING, format("Could not delete view within %s", parent.getClass()));
-                }
-                if (view != null) {
-                    ((ViewGroup) parent).deleteView(view);
                 }
             }
         }
     }
 
-    private Set<GeneratedView> extractGeneratedViews(AbstractProject<?, ?> project) {
-        GeneratedViewsAction gja = project.getAction(GeneratedViewsAction.class);
-        if (gja == null) {
-            return Sets.newLinkedHashSet();
-        } else {
-            return gja.findLastGeneratedViews();
-        }
-    }
-
     private void updateGeneratedConfigFiles(AbstractBuild<?, ?> build, BuildListener listener,
                                             Set<GeneratedConfigFile> freshConfigFiles) {
-        Set<GeneratedConfigFile> generatedConfigFiles = extractGeneratedConfigFiles(build.getProject());
+        Set<GeneratedConfigFile> generatedConfigFiles = extractGeneratedObjects(build.getProject(), GeneratedConfigFilesAction.class);
         Set<GeneratedConfigFile> added = Sets.difference(freshConfigFiles, generatedConfigFiles);
         Set<GeneratedConfigFile> existing = Sets.intersection(generatedConfigFiles, freshConfigFiles);
         Set<GeneratedConfigFile> removed = Sets.difference(generatedConfigFiles, freshConfigFiles);
@@ -443,13 +441,16 @@ public class ExecuteDslScripts extends Builder {
         logItems(listener, "Removing config files", removed);
     }
 
-    private Set<GeneratedConfigFile> extractGeneratedConfigFiles(AbstractProject<?, ?> project) {
-        GeneratedConfigFilesAction gja = project.getAction(GeneratedConfigFilesAction.class);
-        if (gja == null) {
-            return Sets.newLinkedHashSet();
-        } else {
-            return gja.findLastGeneratedConfigFiles();
-        }
+    private void updateGeneratedUserContents(AbstractBuild<?, ?> build, BuildListener listener,
+                                             Set<GeneratedUserContent> freshUserContents) {
+        Set<GeneratedUserContent> generatedUserContents = extractGeneratedObjects(build.getProject(), GeneratedUserContentsAction.class);
+        Set<GeneratedUserContent> added = Sets.difference(freshUserContents, generatedUserContents);
+        Set<GeneratedUserContent> existing = Sets.intersection(generatedUserContents, freshUserContents);
+        Set<GeneratedUserContent> removed = Sets.difference(generatedUserContents, freshUserContents);
+
+        logItems(listener, "Adding user content", added);
+        logItems(listener, "Existing user content", existing);
+        logItems(listener, "Removing user content", removed);
     }
 
     private static void logItems(BuildListener listener, String message, Collection<?> collection) {

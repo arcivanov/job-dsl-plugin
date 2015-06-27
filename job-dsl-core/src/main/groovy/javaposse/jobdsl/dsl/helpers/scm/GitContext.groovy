@@ -1,16 +1,16 @@
 package javaposse.jobdsl.dsl.helpers.scm
 
 import hudson.util.VersionNumber
-import javaposse.jobdsl.dsl.Context
+import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
 
 import static javaposse.jobdsl.dsl.ContextHelper.executeInContext
 
-class GitContext implements Context {
+class GitContext extends AbstractContext {
     private final List<WithXmlAction> withXmlActions
-    private final JobManagement jobManagement
 
     List<Node> remoteConfigs = []
     List<String> branches = []
@@ -20,6 +20,8 @@ class GitContext implements Context {
     boolean remotePoll = false
     boolean shallowClone = false
     boolean pruneBranches = false
+    boolean ignoreNotifyCommit = false
+    boolean recursiveSubmodules = false
     String localBranch
     String relativeTargetDir
     String reference = ''
@@ -31,7 +33,7 @@ class GitContext implements Context {
     final StrategyContext strategyContext = new StrategyContext(jobManagement)
 
     GitContext(List<WithXmlAction> withXmlActions, JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+        super(jobManagement)
         this.withXmlActions = withXmlActions
     }
 
@@ -57,6 +59,9 @@ class GitContext implements Context {
         }
     }
 
+    /**
+     * @since 1.30
+     */
     void strategy(@DslContext(StrategyContext) Closure strategyClosure) {
         executeInContext(strategyClosure, strategyContext)
     }
@@ -106,10 +111,20 @@ class GitContext implements Context {
         this.shallowClone = shallowClone
     }
 
+    /**
+     * @since 1.33
+     */
+    void recursiveSubmodules(boolean recursive = true) {
+        this.recursiveSubmodules = recursive
+    }
+
     void pruneBranches(boolean pruneBranches = true) {
         this.pruneBranches = pruneBranches
     }
 
+    /**
+     * @since 1.25
+     */
     void localBranch(String localBranch) {
         this.localBranch = localBranch
     }
@@ -122,13 +137,26 @@ class GitContext implements Context {
         this.reference = reference
     }
 
+    /**
+     * @since 1.28
+     */
+    @RequiresPlugin(id = 'git', minimumVersion = '2.0.0')
     void cloneTimeout(int cloneTimeout) {
-        jobManagement.requireMinimumPluginVersion('git', '2.0.0')
         this.cloneTimeout = cloneTimeout
     }
 
+    /**
+     * @since 1.26
+     */
     void browser(@DslContext(GitBrowserContext) Closure gitBrowserClosure) {
         executeInContext(gitBrowserClosure, gitBrowserContext)
+    }
+
+    /**
+     * @since 1.33
+     */
+    void ignoreNotifyCommit(boolean ignoreNotifyCommit = true) {
+        this.ignoreNotifyCommit = ignoreNotifyCommit
     }
 
     void configure(Closure withXmlClosure) {

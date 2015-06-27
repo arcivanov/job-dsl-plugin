@@ -11,6 +11,7 @@ import javaposse.jobdsl.dsl.jobs.MultiJob
 import javaposse.jobdsl.dsl.jobs.WorkflowJob
 import javaposse.jobdsl.dsl.views.BuildMonitorView
 import javaposse.jobdsl.dsl.views.BuildPipelineView
+import javaposse.jobdsl.dsl.views.CategorizedJobsView
 import javaposse.jobdsl.dsl.views.DeliveryPipelineView
 import javaposse.jobdsl.dsl.views.ListView
 import javaposse.jobdsl.dsl.views.NestedView
@@ -21,47 +22,78 @@ abstract class JobParent extends Script implements DslFactory {
     Set<Item> referencedJobs = Sets.newLinkedHashSet()
     Set<View> referencedViews = Sets.newLinkedHashSet()
     Set<ConfigFile> referencedConfigFiles = Sets.newLinkedHashSet()
+    Set<UserContent> referencedUserContents = Sets.newLinkedHashSet()
     List<String> queueToBuild = []
 
+    /**
+     * @since 1.30
+     */
     @Override
-    FreeStyleJob job(String name, @DslContext(FreeStyleJob) Closure closure) {
+    FreeStyleJob job(String name, @DslContext(FreeStyleJob) Closure closure = null) {
         freeStyleJob(name, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    FreeStyleJob freeStyleJob(String name, @DslContext(FreeStyleJob) Closure closure) {
+    FreeStyleJob freeStyleJob(String name, @DslContext(FreeStyleJob) Closure closure = null) {
         processJob(name, FreeStyleJob, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    BuildFlowJob buildFlowJob(String name, @DslContext(BuildFlowJob) Closure closure) {
+    @RequiresPlugin(id = 'build-flow-plugin')
+    BuildFlowJob buildFlowJob(String name, @DslContext(BuildFlowJob) Closure closure = null) {
         processJob(name, BuildFlowJob, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    MatrixJob matrixJob(String name, @DslContext(MatrixJob) Closure closure) {
+    MatrixJob matrixJob(String name, @DslContext(MatrixJob) Closure closure = null) {
         processJob(name, MatrixJob, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    MavenJob mavenJob(String name, @DslContext(MavenJob) Closure closure) {
+    @RequiresPlugin(id = 'maven-plugin')
+    MavenJob mavenJob(String name, @DslContext(MavenJob) Closure closure = null) {
         processJob(name, MavenJob, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    MultiJob multiJob(String name, @DslContext(MultiJob) Closure closure) {
+    @RequiresPlugin(id = 'jenkins-multijob-plugin')
+    MultiJob multiJob(String name, @DslContext(MultiJob) Closure closure = null) {
         processJob(name, MultiJob, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    WorkflowJob workflowJob(String name, @DslContext(WorkflowJob) Closure closure) {
+    @RequiresPlugin(id = 'workflow-aggregator')
+    WorkflowJob workflowJob(String name, @DslContext(WorkflowJob) Closure closure = null) {
         processJob(name, WorkflowJob, closure)
     }
 
-    private <T extends Job> T processJob(String name, Class<T> jobClass, Closure closure) {
+    // this method cannot be private due to http://jira.codehaus.org/browse/GROOVY-6263
+    protected <T extends Job> T processJob(String name, Class<T> jobClass, Closure closure) {
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+
         T job = jobClass.newInstance(jm)
         job.name = name
-        job.with(closure)
+        if (closure) {
+            job.with(closure)
+        }
         referencedJobs << job
         job
     }
@@ -80,44 +112,84 @@ abstract class JobParent extends Script implements DslFactory {
         job
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    ListView listView(String name, @DslContext(ListView) Closure closure) {
+    ListView listView(String name, @DslContext(ListView) Closure closure = null) {
         processView(name, ListView, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    SectionedView sectionedView(String name, @DslContext(SectionedView) Closure closure) {
+    @RequiresPlugin(id = 'sectioned-view')
+    SectionedView sectionedView(String name, @DslContext(SectionedView) Closure closure = null) {
         processView(name, SectionedView, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    NestedView nestedView(String name, @DslContext(NestedView) Closure closure) {
+    @RequiresPlugin(id = 'nested-view')
+    NestedView nestedView(String name, @DslContext(NestedView) Closure closure = null) {
         processView(name, NestedView, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    DeliveryPipelineView deliveryPipelineView(String name, @DslContext(DeliveryPipelineView) Closure closure) {
+    @RequiresPlugin(id = 'delivery-pipeline-plugin')
+    DeliveryPipelineView deliveryPipelineView(String name, @DslContext(DeliveryPipelineView) Closure closure = null) {
         processView(name, DeliveryPipelineView, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    BuildPipelineView buildPipelineView(String name, @DslContext(BuildPipelineView) Closure closure) {
+    @RequiresPlugin(id = 'build-pipeline-plugin')
+    BuildPipelineView buildPipelineView(String name, @DslContext(BuildPipelineView) Closure closure = null) {
         processView(name, BuildPipelineView, closure)
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    BuildMonitorView buildMonitorView(String name, @DslContext(BuildMonitorView) Closure closure) {
+    @RequiresPlugin(id = 'build-monitor-plugin')
+    BuildMonitorView buildMonitorView(String name, @DslContext(BuildMonitorView) Closure closure = null) {
         processView(name, BuildMonitorView, closure)
     }
 
-    private <T extends View> T processView(String name, Class<T> viewClass, Closure closure) {
+    /**
+     * @since 1.31
+     */
+    @Override
+    @RequiresPlugin(id = 'categorized-view', minimumVersion = '1.8')
+    CategorizedJobsView categorizedJobsView(String name, @DslContext(CategorizedJobsView) Closure closure = null) {
+        processView(name, CategorizedJobsView, closure)
+    }
+
+    // this method cannot be private due to http://jira.codehaus.org/browse/GROOVY-6263
+    protected <T extends View> T processView(String name, Class<T> viewClass, Closure closure) {
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+
         T view = viewClass.newInstance(jm)
         view.name = name
-        view.with(closure)
+        if (closure) {
+            view.with(closure)
+        }
         referencedViews << view
         view
     }
 
+    /**
+     * @since 1.21
+     */
     @Override
     @Deprecated
     View view(Map<String, Object> arguments = [:], @DslContext(View) Closure closure) {
@@ -131,8 +203,12 @@ abstract class JobParent extends Script implements DslFactory {
         view
     }
 
+    /**
+     * @since 1.23
+     */
     @Override
     @Deprecated
+    @RequiresPlugin(id = 'cloudbees-folder')
     Folder folder(@DslContext(Folder) Closure closure) {
         jm.logDeprecationWarning()
 
@@ -142,27 +218,45 @@ abstract class JobParent extends Script implements DslFactory {
         folder
     }
 
+    /**
+     * @since 1.30
+     */
     @Override
-    Folder folder(String name, @DslContext(Folder) Closure closure) {
+    @RequiresPlugin(id = 'cloudbees-folder')
+    Folder folder(String name, @DslContext(Folder) Closure closure = null) {
         Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
 
         Folder folder = new Folder(jm)
         folder.name = name
-        folder.with(closure)
+        if (closure) {
+            folder.with(closure)
+        }
         referencedJobs << folder
         folder
     }
 
-    ConfigFile customConfigFile(String name, @DslContext(ConfigFile) Closure closure) {
+    /**
+     * @since 1.30
+     */
+    @RequiresPlugin(id = 'config-file-provider')
+    ConfigFile customConfigFile(String name, @DslContext(ConfigFile) Closure closure = null) {
         processConfigFile(name, ConfigFileType.Custom, closure)
     }
 
-    ConfigFile mavenSettingsConfigFile(String name, @DslContext(ConfigFile) Closure closure) {
+    /**
+     * @since 1.30
+     */
+    @RequiresPlugin(id = 'config-file-provider')
+    ConfigFile mavenSettingsConfigFile(String name, @DslContext(ConfigFile) Closure closure = null) {
         processConfigFile(name, ConfigFileType.MavenSettings, closure)
     }
 
+    /**
+     * @since 1.25
+     */
     @Override
     @Deprecated
+    @RequiresPlugin(id = 'config-file-provider')
     ConfigFile configFile(Map<String, Object> arguments = [:], @DslContext(ConfigFile) Closure closure) {
         jm.logDeprecationWarning()
 
@@ -174,37 +268,62 @@ abstract class JobParent extends Script implements DslFactory {
         configFile
     }
 
+    // this method cannot be private due to http://jira.codehaus.org/browse/GROOVY-6263
     protected ConfigFile processConfigFile(String name, ConfigFileType configFileType, Closure closure) {
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+
         ConfigFile configFile = new ConfigFile(configFileType, jm)
         configFile.name = name
-        configFile.with(closure)
+        if (closure) {
+            configFile.with(closure)
+        }
         referencedConfigFiles << configFile
         configFile
     }
 
     @Override
+    void userContent(String path, InputStream content) {
+        referencedUserContents << new UserContent(path, content)
+    }
+
+    /**
+     * @since 1.16
+     */
+    @Override
     void queue(String jobName) {
         queueToBuild << jobName
     }
 
+    /**
+     * @since 1.16
+     */
     @Override
     void queue(Job job) {
         Preconditions.checkArgument(job.name as Boolean)
         queueToBuild << job.name
     }
 
+    /**
+     * @since 1.16
+     */
     @Override
     InputStream streamFileFromWorkspace(String filePath) {
         Preconditions.checkArgument(filePath as Boolean)
         jm.streamFileInWorkspace(filePath)
     }
 
+    /**
+     * @since 1.16
+     */
     @Override
     String readFileFromWorkspace(String filePath) {
         Preconditions.checkArgument(filePath as Boolean)
         jm.readFileInWorkspace(filePath)
     }
 
+    /**
+     * @since 1.25
+     */
     @Override
     String readFileFromWorkspace(String jobName, String filePath) {
         Preconditions.checkArgument(jobName as Boolean)

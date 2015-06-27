@@ -4,59 +4,32 @@ import com.google.common.base.Preconditions
 import com.google.common.base.Strings
 import com.thoughtworks.xstream.io.xml.XmlFriendlyNameCoder
 import hudson.util.VersionNumber
-import javaposse.jobdsl.dsl.Context
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
+import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
+import javaposse.jobdsl.dsl.helpers.AbstractExtensibleContext
 import javaposse.jobdsl.dsl.helpers.common.BuildPipelineContext
 import javaposse.jobdsl.dsl.helpers.common.DownstreamContext
+import javaposse.jobdsl.dsl.helpers.common.PublishOverSshContext
 
 import static com.google.common.base.Preconditions.checkArgument
 import static com.google.common.base.Strings.isNullOrEmpty
 
-class PublisherContext implements Context {
-    private final JobManagement jobManagement
-
+class PublisherContext extends AbstractExtensibleContext {
     List<Node> publisherNodes = []
 
-    PublisherContext(JobManagement jobManagement) {
-        this.jobManagement = jobManagement
+    PublisherContext(JobManagement jobManagement, Item item) {
+        super(jobManagement, item)
     }
 
-    /**
-     * <hudson.plugins.emailext.ExtendedEmailPublisher>
-     *     <recipientList>billing@company.com</recipientList>
-     *     <configuredTriggers>
-     *         <hudson.plugins.emailext.plugins.trigger.FailureTrigger>
-     *             <email>
-     *                 <recipientList/>
-     *                 <subject>$PROJECT_DEFAULT_SUBJECT</subject>
-     *                 <body>$PROJECT_DEFAULT_CONTENT</body>
-     *                 <sendToDevelopers>false</sendToDevelopers>
-     *                 <sendToRequester>false</sendToRequester>
-     *                 <includeCulprits>false</includeCulprits>
-     *                 <sendToRecipientList>true</sendToRecipientList>
-     *             </email>
-     *         </hudson.plugins.emailext.plugins.trigger.FailureTrigger>
-     *         <hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
-     *             <email>
-     *                 <recipientList/>
-     *                 <subject>$PROJECT_DEFAULT_SUBJECT</subject>
-     *                 <body>$PROJECT_DEFAULT_CONTENT</body>
-     *                 <sendToDevelopers>false</sendToDevelopers>
-     *                 <sendToRequester>false</sendToRequester>
-     *                 <includeCulprits>false</includeCulprits>
-     *                 <sendToRecipientList>true</sendToRecipientList>
-     *             </email>
-     *         </hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
-     *     </configuredTriggers>
-     *     <contentType>default</contentType>
-     *     <defaultSubject>$DEFAULT_SUBJECT</defaultSubject>
-     *     <defaultContent>$DEFAULT_CONTENT</defaultContent>
-     *     <attachmentsPattern/>
-     * </hudson.plugins.emailext.ExtendedEmailPublisher>
-     */
+    @Override
+    protected void addExtensionNode(Node node) {
+        publisherNodes << node
+    }
+
     void extendedEmail(String recipients = null, @DslContext(EmailContext) Closure emailClosure = null) {
         extendedEmail(recipients, null, emailClosure)
     }
@@ -66,6 +39,7 @@ class PublisherContext implements Context {
         extendedEmail(recipients, subjectTemplate, null, emailClosure)
     }
 
+    @RequiresPlugin(id = 'email-ext')
     void extendedEmail(String recipients, String subjectTemplate, String contentTemplate,
                        @DslContext(EmailContext) Closure emailClosure = null) {
         EmailContext emailContext = new EmailContext()
@@ -78,8 +52,7 @@ class PublisherContext implements Context {
         }
 
         // Now that the context has what we need
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node emailNode = nodeBuilder.'hudson.plugins.emailext.ExtendedEmailPublisher' {
+        Node emailNode = new NodeBuilder().'hudson.plugins.emailext.ExtendedEmailPublisher' {
             recipientList recipients != null ? recipients : '$DEFAULT_RECIPIENTS'
             contentType 'default'
             defaultSubject subjectTemplate ?: '$DEFAULT_SUBJECT'
@@ -113,65 +86,64 @@ class PublisherContext implements Context {
     }
 
     /**
-     <hudson.tasks.Mailer>
-     <recipients>nbn@nineconsult.dk</recipients>
-     <dontNotifyEveryUnstableBuild>false</dontNotifyEveryUnstableBuild>
-     <sendToIndividuals>true</sendToIndividuals>
-     </hudson.tasks.Mailer>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'mailer')
     void mailer(String mailRecipients, Boolean dontNotifyEveryUnstableBuildBoolean = false,
                Boolean sendToIndividualsBoolean = false) {
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        Node mailerNode = nodeBuilder.'hudson.tasks.Mailer' {
+        publisherNodes << new NodeBuilder().'hudson.tasks.Mailer' {
             recipients(mailRecipients)
             dontNotifyEveryUnstableBuild(dontNotifyEveryUnstableBuildBoolean)
             sendToIndividuals(sendToIndividualsBoolean)
         }
-        publisherNodes << mailerNode
     }
 
     /**
-     * <hudson.tasks.ArtifactArchiver>
-     *     <artifacts>build/libs/*</artifacts>
-     *     <excludes>build/libs/bad/*</excludes>
-     *     <latestOnly>false</latestOnly>
-     *     <allowEmptyArchive>false</allowEmptyArchive>
-     * </hudson.tasks.ArtifactArchiver>
+     * @since 1.20
      */
     void archiveArtifacts(@DslContext(ArchiveArtifactsContext) Closure artifactsClosure) {
-        ArchiveArtifactsContext artifactsContext = new ArchiveArtifactsContext()
+        ArchiveArtifactsContext artifactsContext = new ArchiveArtifactsContext(jobManagement)
         ContextHelper.executeInContext(artifactsClosure, artifactsContext)
 
         publisherNodes << new NodeBuilder().'hudson.tasks.ArtifactArchiver' {
-            artifacts artifactsContext.patterns.join(',')
-            latestOnly artifactsContext.latestOnlyValue
-            if (artifactsContext.allowEmptyValue != null) {
-                allowEmptyArchive artifactsContext.allowEmptyValue
+            artifacts(artifactsContext.patterns.join(','))
+            if (artifactsContext.excludes) {
+                excludes(artifactsContext.excludes)
             }
-            if (artifactsContext.excludesValue) {
-                excludes artifactsContext.excludesValue
+            latestOnly(artifactsContext.latestOnly)
+            allowEmptyArchive(artifactsContext.allowEmpty)
+            if (!jobManagement.jenkinsVersion.isOlderThan(new VersionNumber('1.575'))) {
+                defaultExcludes(artifactsContext.defaultExcludes)
+            }
+            if (!jobManagement.jenkinsVersion.isOlderThan(new VersionNumber('1.571'))) {
+                delegate.fingerprint(artifactsContext.fingerprint)
+            }
+            if (!jobManagement.jenkinsVersion.isOlderThan(new VersionNumber('1.567'))) {
+                onlyIfSuccessful(artifactsContext.onlyIfSuccessful)
             }
         }
     }
 
-    void archiveArtifacts(String glob, String excludeGlob = null, Boolean latestOnlyBoolean = false) {
+    void archiveArtifacts(String glob, String excludeGlob = null) {
         archiveArtifacts {
-            pattern glob
-            exclude excludeGlob
-            latestOnly latestOnlyBoolean
+            pattern(glob)
+            exclude(excludeGlob)
+        }
+    }
+
+    @Deprecated
+    void archiveArtifacts(String glob, String excludeGlob, boolean latestOnly) {
+        jobManagement.logDeprecationWarning()
+
+        archiveArtifacts {
+            pattern(glob)
+            exclude(excludeGlob)
+            delegate.latestOnly(latestOnly)
         }
     }
 
     /**
-     * <hudson.tasks.junit.JUnitResultArchiver>
-     *     <testResults>build/test/*.xml</testResults>
-     *     <keepLongStdio>true</keepLongStdio>
-     *     <testDataPublishers>
-     *         <hudson.plugins.claim.ClaimTestDataPublisher/>
-     *         <hudson.plugins.junitattachments.AttachmentPublisher/>
-     *         <de.esailors.jenkins.teststability.StabilityTestDataPublisher/>
-     *     </testDataPublishers>
-     * </hudson.tasks.junit.JUnitResultArchiver>
+     * @since 1.26
      */
     void archiveJunit(String glob, @DslContext(ArchiveJUnitContext) Closure junitClosure = null) {
         ArchiveJUnitContext junitContext = new ArchiveJUnitContext(jobManagement)
@@ -184,68 +156,15 @@ class PublisherContext implements Context {
         }
     }
 
-    void archiveJunit(String glob, boolean retainLongStdout, boolean allowClaimingOfFailedTests = false,
-                     boolean publishTestAttachments = false) {
-        jobManagement.logDeprecationWarning()
-        archiveJunit(glob) {
-            if (retainLongStdout) {
-                delegate.retainLongStdout()
-            }
-            testDataPublishers {
-                if (allowClaimingOfFailedTests) {
-                    delegate.allowClaimingOfFailedTests()
-                }
-                if (publishTestAttachments) {
-                    delegate.publishTestAttachments()
-                }
-            }
-        }
-    }
-
     /**
-     * <xunit>
-     *     <types>
-     *         <JUnitType>
-     *             <pattern></pattern>
-     *             <skipNoTestFiles>false</skipNoTestFiles>
-     *             <failIfNotNew>true</failIfNotNew>
-     *             <deleteOutputFiles>true</deleteOutputFiles>
-     *             <stopProcessingIfError>true</stopProcessingIfError>
-     *         </JUnitType>
-     *         <CustomType>
-     *             <pattern></pattern>
-     *             <skipNoTestFiles>false</skipNoTestFiles>
-     *             <failIfNotNew>true</failIfNotNew>
-     *             <deleteOutputFiles>true</deleteOutputFiles>
-     *             <stopProcessingIfError>true</stopProcessingIfError>
-     *             <customXSL></customXSL>
-     *         </CustomType>
-     *     </types>
-     *     <thresholds>
-     *         <org.jenkinsci.plugins.xunit.threshold.FailedThreshold>
-     *             <unstableThreshold></unstableThreshold>
-     *             <unstableNewThreshold></unstableNewThreshold>
-     *             <failureThreshold></failureThreshold>
-     *             <failureNewThreshold></failureNewThreshold>
-     *         </org.jenkinsci.plugins.xunit.threshold.FailedThreshold>
-     *         <org.jenkinsci.plugins.xunit.threshold.SkippedThreshold>
-     *             <unstableThreshold></unstableThreshold>
-     *             <unstableNewThreshold></unstableNewThreshold>
-     *             <failureThreshold></failureThreshold>
-     *             <failureNewThreshold></failureNewThreshold>
-     *         </org.jenkinsci.plugins.xunit.threshold.SkippedThreshold>
-     *     </thresholds>
-     *     <thresholdMode>1</thresholdMode>
-     *     <extraConfiguration>
-     *         <testTimeMargin>3000</testTimeMargin>
-     *     </extraConfiguration>
-     * </xunit>
+     * @since 1.24
      */
+    @RequiresPlugin(id = 'xunit')
     void archiveXUnit(@DslContext(ArchiveXUnitContext) Closure xUnitClosure) {
         ArchiveXUnitContext xUnitContext = new ArchiveXUnitContext()
         ContextHelper.executeInContext(xUnitClosure, xUnitContext)
 
-        publisherNodes << NodeBuilder.newInstance().'xunit' {
+        publisherNodes << new NodeBuilder().'xunit' {
             types {
                 xUnitContext.resultFiles.each { ArchiveXUnitResultFileContext resultFile ->
                     "${resultFile.type}" {
@@ -282,35 +201,14 @@ class PublisherContext implements Context {
     }
 
     /**
-     <hudson.plugins.jacoco.JacocoPublisher>
-     <execPattern>"target/*.exec"</execPattern>
-     <classPattern>"target/classes"</classPattern>
-     <sourcePattern>"src/main/java"</sourcePattern>
-     <inclusionPattern>"*.class"</inclusionPattern>
-     <exclusionPattern>"*.Test*"</exclusionPattern>
-     <minimumInstructionCoverage>0</minimumInstructionCoverage>
-     <minimumBranchCoverage>0</minimumBranchCoverage>
-     <minimumComplexityCoverage>0</minimumComplexityCoverage>
-     <minimumLineCoverage>0</minimumLineCoverage>
-     <minimumMethodCoverage>0</minimumMethodCoverage>
-     <minimumClassCoverage>0</minimumClassCoverage>
-     <maximumInstructionCoverage>0</maximumInstructionCoverage>
-     <maximumBranchCoverage>0</maximumBranchCoverage>
-     <maximumComplexityCoverage>0</maximumComplexityCoverage>
-     <maximumLineCoverage>0</maximumLineCoverage>
-     <maximumMethodCoverage>0</maximumMethodCoverage>
-     <maximumClassCoverage>0</maximumClassCoverage>
-     <changeBuildStatus>false</changeBuildStatus>
-     </hudson.plugins.jacoco.JacocoPublisher>
-     **/
+     * @since 1.17
+     */
+    @RequiresPlugin(id = 'jacoco')
     void jacocoCodeCoverage(@DslContext(JacocoContext) Closure jacocoClosure = null) {
-
         JacocoContext jacocoContext = new JacocoContext()
         ContextHelper.executeInContext(jacocoClosure, jacocoContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-
-        Node jacocoNode = nodeBuilder.'hudson.plugins.jacoco.JacocoPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.jacoco.JacocoPublisher' {
             execPattern jacocoContext.execPattern
             classPattern jacocoContext.classPattern
             sourcePattern jacocoContext.sourcePattern
@@ -329,32 +227,86 @@ class PublisherContext implements Context {
             maximumMethodCoverage jacocoContext.maximumMethodCoverage
             maximumClassCoverage jacocoContext.maximumClassCoverage
             if (jacocoContext.changeBuildStatus != null) {
-                changeBuildStatus Boolean.toString(jacocoContext.changeBuildStatus)
+                changeBuildStatus jacocoContext.changeBuildStatus
             }
         }
-
-        publisherNodes << jacocoNode
     }
 
     /**
-     * <htmlpublisher.HtmlPublisher>
-     *     <reportTargets>
-     *         <htmlpublisher.HtmlPublisherTarget>
-     *             <reportName>Gradle Tests</reportName>
-     *             <reportDir>build/reports/tests/</reportDir>
-     *             <reportFiles>index.html</reportFiles>
-     *             <keepAll>false</keepAll>
-     *             <allowMissing>false</allowMissing>
-     *             <wrapperName>htmlpublisher-wrapper.html</wrapperName>
-     *         </htmlpublisher.HtmlPublisherTarget>
-     *     </reportTargets>
-     * </htmlpublisher.HtmlPublisher>
+     * @since 1.31
      */
+    @RequiresPlugin(id = 'plot', minimumVersion = '1.9')
+    void plotBuildData(@DslContext(PlotsContext) Closure plotsClosure) {
+        PlotsContext plotsContext = new PlotsContext()
+        ContextHelper.executeInContext(plotsClosure, plotsContext)
+
+        publisherNodes << new NodeBuilder().'hudson.plugins.plot.PlotPublisher' {
+            plots {
+                plotsContext.plots.each { PlotContext plot ->
+                    'hudson.plugins.plot.Plot' {
+                        title(plot.title ?: '')
+                        yaxis(plot.yAxis ?: '')
+                        series {
+                            plot.dataSeriesList.each { PlotSeriesContext data ->
+                                "hudson.plugins.plot.${data.seriesType}" {
+                                    file(data.fileName)
+                                    fileType(data.fileType)
+                                    if (data instanceof PlotPropertiesSeriesContext) {
+                                        label(data.label ?: '')
+                                    }
+                                    if (data instanceof PlotCSVSeriesContext) {
+                                        label()
+                                        inclusionFlag(data.inclusionFlag)
+                                        exclusionValues(data.exclusionSet.join(','))
+                                        switch (data.inclusionFlag) {
+                                            case ['INCLUDE_BY_STRING', 'EXCLUDE_BY_STRING']:
+                                                strExclusionSet {
+                                                    data.exclusionSet.each { String exclusion ->
+                                                        string(exclusion)
+                                                    }
+                                                }
+                                                break
+                                            case ['INCLUDE_BY_COLUMN', 'EXCLUDE_BY_COLUMN']:
+                                                colExclusionSet {
+                                                    data.exclusionSet.each { String exclusion ->
+                                                        'int'(exclusion)
+                                                    }
+                                                }
+                                                break
+                                        }
+                                        url(data.url ?: '')
+                                        displayTableFlag(data.showTable)
+                                    }
+                                    if (data instanceof PlotXMLSeriesContext) {
+                                        label()
+                                        xpathString(data.xpath ?: '')
+                                        url(data.url ?: '')
+                                        nodeTypeString(data.nodeType)
+                                    }
+                                }
+                            }
+                        }
+                        group(plot.group)
+                        numBuilds(plot.numberOfBuilds ?: '')
+                        csvFileName(plot.dataStore)
+                        csvLastModification(0)
+                        style(plot.style)
+                        useDescr(plot.useDescriptions)
+                        keepRecords(plot.keepRecords)
+                        exclZero(plot.excludeZero)
+                        logarithmic(plot.logarithmic)
+                    }
+                }
+            }
+        }
+    }
+
+    @RequiresPlugin(id = 'htmlpublisher')
     void publishHtml(@DslContext(HtmlReportContext) Closure htmlReportContext) {
         HtmlReportContext reportContext = new HtmlReportContext(jobManagement)
         ContextHelper.executeInContext(htmlReportContext, reportContext)
 
-        publisherNodes << NodeBuilder.newInstance().'htmlpublisher.HtmlPublisher' {
+        publisherNodes << new NodeBuilder().'htmlpublisher.HtmlPublisher' {
             reportTargets {
                 reportContext.targets.each { HtmlReportTargetContext target ->
                     'htmlpublisher.HtmlPublisherTarget' {
@@ -365,6 +317,9 @@ class PublisherContext implements Context {
                         if (!jobManagement.getPluginVersion('htmlpublisher')?.isOlderThan(new VersionNumber('1.3'))) {
                             allowMissing(target.allowMissing)
                         }
+                        if (!jobManagement.getPluginVersion('htmlpublisher')?.isOlderThan(new VersionNumber('1.4'))) {
+                            alwaysLinkToLastBuild(target.alwaysLinkToLastBuild)
+                        }
                         wrapperName('htmlpublisher-wrapper.html')
                     }
                 }
@@ -372,24 +327,6 @@ class PublisherContext implements Context {
         }
     }
 
-    /**
-     * <hudson.plugins.jabber.im.transport.JabberPublisher>
-     *     <targets>
-     *         <hudson.plugins.im.GroupChatIMMessageTarget>
-     *             <name>api@conference.jabber.netflix.com</name>
-     *             <notificationOnly>false</notificationOnly>
-     *         </hudson.plugins.im.GroupChatIMMessageTarget>
-     *     </targets>
-     *     <strategy>ALL</strategy>
-     *     <notifyOnBuildStart>false</notifyOnBuildStart>
-     *     <notifySuspects>false</notifySuspects>
-     *     <notifyCulprits>false</notifyCulprits>
-     *     <notifyFixers>false</notifyFixers>
-     *     <notifyUpstreamCommitters>false</notifyUpstreamCommitters>
-     *     <buildToChatNotifier class="hudson.plugins.im.build_notify.DefaultBuildToChatNotifier"/>
-     *     <matrixMultiplier>ONLY_CONFIGURATIONS</matrixMultiplier>
-     * </hudson.plugins.jabber.im.transport.JabberPublisher>
-     */
     void publishJabber(String target, @DslContext(JabberContext) Closure jabberClosure = null) {
         publishJabber(target, null, null, jabberClosure)
     }
@@ -400,6 +337,7 @@ class PublisherContext implements Context {
     }
 
     @Deprecated
+    @RequiresPlugin(id = 'jabber')
     void publishJabber(String targetsArg, String strategyName, String channelNotificationName,
                        @DslContext(JabberContext) Closure jabberClosure = null) {
         if (strategyName || channelNotificationName) {
@@ -422,7 +360,7 @@ class PublisherContext implements Context {
                         validJabberChannelNotificationNames.join(',')
         )
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.jabber.im.transport.JabberPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.jabber.im.transport.JabberPublisher' {
             targets {
                 targetsArg.split().each { target ->
                     boolean isGroup = target.startsWith('*')
@@ -457,26 +395,15 @@ class PublisherContext implements Context {
     @Deprecated
     Set<String> validJabberChannelNotificationNames = ['Default', 'SummaryOnly', 'BuildParameters', 'PrintFailingTests']
 
-    /**
-     * <be.certipost.hudson.plugin.SCPRepositoryPublisher>
-     *     <siteName>javadoc</siteName>
-     *     <entries>
-     *         <be.certipost.hudson.plugin.Entry>
-     *             <filePath/>
-     *             <sourceFile>api-sdk/*</sourceFile>
-     *             <keepHierarchy>true</keepHierarchy>
-     *         </be.certipost.hudson.plugin.Entry>
-     *     </entries>
-     * </be.certipost.hudson.plugin.SCPRepositoryPublisher>
-     */
+    @RequiresPlugin(id = 'scp')
     void publishScp(String site, @DslContext(ScpContext) Closure scpClosure) {
         ScpContext scpContext = new ScpContext()
         ContextHelper.executeInContext(scpClosure, scpContext)
 
         // Validate values
-        assert !scpContext.entries.empty, 'Scp publish requires at least one entry'
+        Preconditions.checkArgument(!scpContext.entries.empty, 'Scp publish requires at least one entry')
 
-        publisherNodes << NodeBuilder.newInstance().'be.certipost.hudson.plugin.SCPRepositoryPublisher' {
+        publisherNodes << new NodeBuilder().'be.certipost.hudson.plugin.SCPRepositoryPublisher' {
             siteName site
             entries {
                 scpContext.entries.each { ScpContext.ScpEntry entry ->
@@ -492,14 +419,6 @@ class PublisherContext implements Context {
 
     /**
      * Clone Workspace SCM
-     *
-     * <hudson.plugins.cloneworkspace.CloneWorkspacePublisher>
-     *     <workspaceGlob></workspaceGlob>
-     *     <workspaceExcludeGlob></workspaceExcludeGlob>
-     *     <criteria>Any</criteria>
-     *     <archiveMethod>TAR</archiveMethod>
-     *     <overrideDefaultExcludes>true</overrideDefaultExcludes>
-     * </hudson.plugins.cloneworkspace.CloneWorkspacePublisher>
      */
     void publishCloneWorkspace(String workspaceGlob, @DslContext(CloneWorkspaceContext) Closure cloneWorkspaceClosure) {
         publishCloneWorkspace(workspaceGlob, '', 'Any', 'TAR', false, cloneWorkspaceClosure)
@@ -517,6 +436,7 @@ class PublisherContext implements Context {
         )
     }
 
+    @RequiresPlugin(id = 'clone-workspace-scm')
     void publishCloneWorkspace(String workspaceGlobArg, String workspaceExcludeGlobArg = '', String criteriaArg = 'Any',
                                String archiveMethodArg = 'TAR', boolean overrideDefaultExcludesArg = false,
                                @DslContext(CloneWorkspaceContext) Closure cloneWorkspaceClosure = null) {
@@ -528,21 +448,23 @@ class PublisherContext implements Context {
         ContextHelper.executeInContext(cloneWorkspaceClosure, cloneWorkspaceContext)
 
         // Validate values
-        assert validCloneWorkspaceCriteria.contains(cloneWorkspaceContext.criteria),
+        Preconditions.checkArgument(
+                validCloneWorkspaceCriteria.contains(cloneWorkspaceContext.criteria),
                 "Clone Workspace Criteria needs to be one of these values: ${validCloneWorkspaceCriteria.join(',')}"
-        assert validCloneWorkspaceArchiveMethods.contains(cloneWorkspaceContext.archiveMethod),
+        )
+        Preconditions.checkArgument(
+                validCloneWorkspaceArchiveMethods.contains(cloneWorkspaceContext.archiveMethod),
                 'Clone Workspace Archive Method needs to be one of these values: ' +
                         validCloneWorkspaceArchiveMethods.join(',')
+        )
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node publishNode = nodeBuilder.'hudson.plugins.cloneworkspace.CloneWorkspacePublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.cloneworkspace.CloneWorkspacePublisher' {
             workspaceGlob workspaceGlobArg
             workspaceExcludeGlob cloneWorkspaceContext.workspaceExcludeGlob
             criteria cloneWorkspaceContext.criteria
             archiveMethod cloneWorkspaceContext.archiveMethod
             overrideDefaultExcludes cloneWorkspaceContext.overrideDefaultExcludes
         }
-        publisherNodes << publishNode
     }
 
     static List<String> validCloneWorkspaceCriteria = ['Any', 'Not Failed', 'Successful']
@@ -550,26 +472,14 @@ class PublisherContext implements Context {
 
     /**
      * Downstream build
-     *
-     <hudson.tasks.BuildTrigger>
-     <childProjects>DSL-Tutorial-1-Test</childProjects>
-     <threshold>
-     <name>SUCCESS</name>
-     <ordinal>0</ordinal>
-     <color>BLUE</color>
-     </threshold>
-     // or
-     <threshold><name>UNSTABLE</name><ordinal>1</ordinal><color>YELLOW</color></threshold>
-     // or
-     <threshold><name>FAILURE</name><ordinal>2</ordinal><color>RED</color></threshold>
-     </hudson.tasks.BuildTrigger>
      */
     void downstream(String projectName, String thresholdName = 'SUCCESS') {
-        assert DownstreamContext.THRESHOLD_COLOR_MAP.containsKey(thresholdName),
+        Preconditions.checkArgument(
+                DownstreamContext.THRESHOLD_COLOR_MAP.containsKey(thresholdName),
                 "thresholdName must be one of these values ${DownstreamContext.THRESHOLD_COLOR_MAP.keySet().join(',')}"
+        )
 
-        NodeBuilder nodeBuilder = new NodeBuilder()
-        Node publishNode = nodeBuilder.'hudson.tasks.BuildTrigger' {
+        publisherNodes << new NodeBuilder().'hudson.tasks.BuildTrigger' {
             childProjects projectName
             threshold {
                 delegate.createNode('name', thresholdName)
@@ -577,65 +487,30 @@ class PublisherContext implements Context {
                 color DownstreamContext.THRESHOLD_COLOR_MAP[thresholdName]
             }
         }
-
-        publisherNodes << publishNode
     }
 
     /**
-     Trigger parameterized build on other projects.
-
-     <hudson.plugins.parameterizedtrigger.BuildTrigger>
-     <configs>
-     <hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
-     <configs>
-     <hudson.plugins.parameterizedtrigger.CurrentBuildParameters/> // Current build parameters
-     <hudson.plugins.parameterizedtrigger.FileBuildParameters> // Parameters from properties file
-     <propertiesFile>some.properties</propertiesFile>
-     </hudson.plugins.parameterizedtrigger.FileBuildParameters>
-     <hudson.plugins.git.GitRevisionBuildParameters> // Pass-through Git commit that was built
-     <combineQueuedCommits>false</combineQueuedCommits>
-     </hudson.plugins.git.GitRevisionBuildParameters>
-     <hudson.plugins.parameterizedtrigger.PredefinedBuildParameters> // Predefined properties
-     <properties>prop1=value1
-     prop2=value2</properties>
-     </hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
-     <hudson.plugins.parameterizedtrigger.matrix.MatrixSubsetBuildParameters> // Restrict matrix execution to a subset
-     <filter>label=="${TARGET}"</filter>
-     </hudson.plugins.parameterizedtrigger.matrix.MatrixSubsetBuildParameters>
-     <hudson.plugins.parameterizedtrigger.SubversionRevisionBuildParameters/> // Subversion revision
-     </configs>
-     <projects>NEBULA-ubuntu-packaging-plugin</projects>
-     <condition>SUCCESS</condition>
-     <triggerWithNoParameters>false</triggerWithNoParameters>
-     </hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
-     <hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
-     <configs class="java.util.Collections$EmptyList"/>
-     <projects>DSL-Tutorial-1-Test</projects>
-     <condition>SUCCESS</condition> // SUCCESS, UNSTABLE, UNSTABLE_OR_BETTER, UNSTABLE_OR_WORSE, FAILED, ALWAYS
-     <triggerWithNoParameters>false</triggerWithNoParameters>
-     </hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
-     </configs>
-     </hudson.plugins.parameterizedtrigger.BuildTrigger>
+     * Trigger parameterized build on other projects.
      */
+    @RequiresPlugin(id = 'parameterized-trigger')
     void downstreamParameterized(@DslContext(DownstreamContext) Closure downstreamClosure) {
-        DownstreamContext downstreamContext = new DownstreamContext()
+        DownstreamContext downstreamContext = new DownstreamContext(jobManagement)
         ContextHelper.executeInContext(downstreamClosure, downstreamContext)
 
-        Node publishNode = downstreamContext.createDownstreamNode(false)
-        publisherNodes << publishNode
+        publisherNodes << downstreamContext.createDownstreamNode(false)
     }
 
     void violations(@DslContext(ViolationsContext) Closure violationsClosure = null) {
         violations(100, violationsClosure)
     }
 
+    @RequiresPlugin(id = 'violations')
     void violations(int perFileDisplayLimit, @DslContext(ViolationsContext) Closure violationsClosure = null) {
         ViolationsContext violationsContext = new ViolationsContext()
         violationsContext.perFileDisplayLimit = perFileDisplayLimit
         ContextHelper.executeInContext(violationsClosure, violationsContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node publishNode = nodeBuilder.'hudson.plugins.violations.ViolationsPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.violations.ViolationsPublisher' {
             config {
                 suppressions(class: 'tree-set') {
                     'no-comparator'()
@@ -663,29 +538,24 @@ class PublisherContext implements Context {
                 encoding(violationsContext.sourceEncoding ?: 'default')
             }
         }
-        publisherNodes << publishNode
     }
 
-    /*
-    <hudson.plugins.chucknorris.CordellWalkerRecorder>
-     <factGenerator/>
-    </hudson.plugins.chucknorris.CordellWalkerRecorder>
-    */
-
+    @RequiresPlugin(id = 'chucknorris')
     void chucknorris() {
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node publishNode = nodeBuilder.'hudson.plugins.chucknorris.CordellWalkerRecorder' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.chucknorris.CordellWalkerRecorder' {
             'factGenerator' ''
         }
-        publisherNodes << publishNode
     }
 
+    /**
+     * @since 1.15
+     */
+    @RequiresPlugin(id = 'ircbot')
     void irc(@DslContext(IrcContext) Closure ircClosure) {
         IrcContext ircContext = new IrcContext()
         ContextHelper.executeInContext(ircClosure, ircContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node publishNode = nodeBuilder.'hudson.plugins.ircbot.IrcPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.ircbot.IrcPublisher' {
             targets {
                 ircContext.channels.each { IrcContext.IrcPublisherChannel channel ->
                     'hudson.plugins.im.GroupChatIMMessageTarget' {
@@ -705,16 +575,17 @@ class PublisherContext implements Context {
             String className = "hudson.plugins.im.build_notify.${ircContext.notificationMessage}BuildToChatNotifier"
             buildToChatNotifier(class: className)
         }
-
-        publisherNodes << publishNode
     }
 
+    /**
+     * @since 1.16
+     */
+    @RequiresPlugin(id = 'cobertura')
     void cobertura(String reportFile, @DslContext(CoberturaContext) Closure coberturaClosure = null) {
-
         CoberturaContext coberturaContext = new CoberturaContext()
         ContextHelper.executeInContext(coberturaClosure, coberturaContext)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.cobertura.CoberturaPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.cobertura.CoberturaPublisher' {
             coberturaReportFile(reportFile)
             onlyStable(coberturaContext.onlyStable)
             failUnhealthy(coberturaContext.failUnhealthy)
@@ -740,43 +611,34 @@ class PublisherContext implements Context {
     }
 
     /**
-     * <hudson.plugins.claim.ClaimPublisher/>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'claim')
     void allowBrokenBuildClaiming() {
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.claim.ClaimPublisher'()
+        publisherNodes << new NodeBuilder().'hudson.plugins.claim.ClaimPublisher'()
     }
 
     /**
-     * Configures Fingerprinting
+     * Configures Fingerprinting.
      *
-     * <hudson.tasks.Fingerprinter>
-     *    <targets>**</targets>
-     *    <recordBuildArtifacts>true</recordBuildArtifacts>
-     * </hudson.tasks.Fingerprinter>
-     *
+     * @since 1.17
      */
     void fingerprint(String targets, boolean recordBuildArtifacts = false) {
-        publisherNodes << NodeBuilder.newInstance().'hudson.tasks.Fingerprinter' {
+        publisherNodes << new NodeBuilder().'hudson.tasks.Fingerprinter' {
             delegate.targets(targets ?: '')
             delegate.recordBuildArtifacts(recordBuildArtifacts)
         }
     }
 
     /**
-     * Configures the Description Setter Plugin
+     * Configures the Description Setter Plugin.
      *
-     * <publishers>
-     *     <hudson.plugins.descriptionsetter.DescriptionSetterPublisher>
-     *         <regexp>foo</regexp>
-     *         <regexpForFailed>bar</regexpForFailed>
-     *         <description>Hello</description>
-     *         <descriptionForFailed>World</descriptionForFailed>
-     *         <setForMatrix>false</setForMatrix>
-     *     </hudson.plugins.descriptionsetter.DescriptionSetterPublisher>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'description-setter')
     void buildDescription(String regularExpression, String description = '', String regularExpressionForFailed = '',
                          String descriptionForFailed = '', boolean multiConfigurationBuild = false) {
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.descriptionsetter.DescriptionSetterPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.descriptionsetter.DescriptionSetterPublisher' {
             regexp(regularExpression)
             regexpForFailed(regularExpressionForFailed)
             if (description) {
@@ -790,20 +652,14 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Jenkins Text Finder plugin
+     * Configures the Jenkins Text Finder plugin.
      *
-     * <publishers>
-     *     <hudson.plugins.textfinder.TextFinderPublisher>
-     *         <fileSet>*.txt</fileSet>
-     *         <regexp/>
-     *         <succeedIfFound>false</succeedIfFound>
-     *         <unstableIfFound>false</unstableIfFound>
-     *         <alsoCheckConsoleOutput>false</alsoCheckConsoleOutput>
-     *     </hudson.plugins.textfinder.TextFinderPublisher>
+     * @since 1.19
      */
+    @RequiresPlugin(id = 'text-finder')
     void textFinder(String regularExpression, String fileSet = '', boolean alsoCheckConsoleOutput = false,
                    boolean succeedIfFound = false, unstableIfFound = false) {
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.textfinder.TextFinderPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.textfinder.TextFinderPublisher' {
             if (fileSet) {
                 delegate.fileSet(fileSet)
             }
@@ -815,30 +671,16 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Jenkins Post Build Task plugin
+     * Configures the Jenkins Post Build Task plugin.
      *
-     * <publishers>
-     *     <hudson.plugins.postbuildtask.PostbuildTask>
-     *          <tasks>
-     *              <hudson.plugins.postbuildtask.TaskProperties>
-     *                  <logTexts>
-     *                      <hudson.plugins.postbuildtask.LogProperties>
-     *                          <logText>BUILD SUCCESSFUL</logText>
-     *                          <operator>AND</operator>
-     *                      </hudson.plugins.postbuildtask.LogProperties>
-     *                  </logTexts>
-     *                  <EscalateStatus>false</EscalateStatus>
-     *                  <RunIfJobSuccessful>false</RunIfJobSuccessful>
-     *                  <script>git clean -fdx</script>
-     *              </hudson.plugins.postbuildtask.TaskProperties>
-     *          </tasks>
-     *      </hudson.plugins.postbuildtask.PostbuildTask>
+     * @since 1.19
      */
+    @RequiresPlugin(id = 'postbuild-task')
     void postBuildTask(@DslContext(PostBuildTaskContext) Closure postBuildClosure) {
         PostBuildTaskContext postBuildContext = new PostBuildTaskContext()
         ContextHelper.executeInContext(postBuildClosure, postBuildContext)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.postbuildtask.PostbuildTask' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.postbuildtask.PostbuildTask' {
             tasks {
                 postBuildContext.tasks.each { PostBuildTaskContext.PostBuildTask task ->
                     'hudson.plugins.postbuildtask.TaskProperties' {
@@ -862,17 +704,10 @@ class PublisherContext implements Context {
      * aggregate downstream test results. Pass in comma-delimited list for first arg to manually choose jobs.
      * Second argument is optional and sets whether failed builds are included.
      *
-     * <publishers>
-     *     ...
-     *     <hudson.tasks.test.AggregatedTestResultPublisher>
-     *         <jobs>some-downstream-test</jobs>
-     *         <includeFailedBuilds>false</includeFailedBuilds>
-     *     </hudson.tasks.test.AggregatedTestResultPublisher>
-     *     ...
-     * </publishers>
+     * @since 1.19
      */
     void aggregateDownstreamTestResults(String jobs = null, boolean includeFailedBuilds = false) {
-        publisherNodes << NodeBuilder.newInstance().'hudson.tasks.test.AggregatedTestResultPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.tasks.test.AggregatedTestResultPublisher' {
             if (jobs) {
                 delegate.jobs(jobs)
             }
@@ -893,18 +728,13 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Groovy Postbuild script plugin
+     * Configures the Groovy Postbuild script plugin.
      *
-     * <publishers>
-     *     <org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder>
-     *         <groovyScript>
-     *         script
-     *         </groovyScript>
-     *         <behavior>0</behavior>
-     *     </org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder>
+     * @since 1.19
      */
+    @RequiresPlugin(id = 'groovy-postbuild')
     void groovyPostBuild(String script, Behavior behavior = Behavior.DoNothing) {
-        publisherNodes << NodeBuilder.newInstance().'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder' {
+        publisherNodes << new NodeBuilder().'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder' {
             delegate.groovyScript(script)
             delegate.behavior(behavior.value)
         }
@@ -913,72 +743,43 @@ class PublisherContext implements Context {
     /**
      * Configures the Javadoc Plugin, used to archive Javadoc artifacts.
      *
-     * Uses the Jenkins Javadoc Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Javadoc+Plugin
-     *
-     * <publishers>
-     *     <hudson.tasks.JavadocArchiver>
-     *         <javadocDir>foo</javadocDir>
-     *         <keepAll>false</keepAll>
-     *     </hudson.tasks.JavadocArchiver>
-     * </publishers>
+     * @since 1.19
      */
+    @RequiresPlugin(id = 'javadoc')
     void archiveJavadoc(@DslContext(JavadocContext) Closure javadocClosure = null) {
         JavadocContext javadocContext = new JavadocContext()
         ContextHelper.executeInContext(javadocClosure, javadocContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-
-        Node javadocNode = nodeBuilder.'hudson.tasks.JavadocArchiver' {
+        publisherNodes << new NodeBuilder().'hudson.tasks.JavadocArchiver' {
             javadocDir javadocContext.javadocDir
             keepAll javadocContext.keepAll
         }
-
-        publisherNodes << javadocNode
     }
 
     /**
      * Configures the Associated Files plugin to associate archived files from
      * outside Jenkins proper.
      *
-     * See https://wiki.jenkins-ci.org/display/JENKINS/Associated+Files+Plugin
-     *
-     * <publishers>
-     *     <org.jenkinsci.plugins.associatedfiles.AssociatedFilesPublisher>
-     *         <associatedFiles>/mnt/jenkins-staging/binary-staging/${JOB_NAME}-${BUILD_ID}</associatedFiles>
-     *     </org.jenkinsci.plugins.associatedfiles.AssociatedFilesPublisher>
-     * </publishers>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'associated-files')
     void associatedFiles(String files = null) {
-        publisherNodes << NodeBuilder.newInstance().'org.jenkinsci.plugins.associatedfiles.AssociatedFilesPublisher' {
+        publisherNodes << new NodeBuilder().'org.jenkinsci.plugins.associatedfiles.AssociatedFilesPublisher' {
             delegate.associatedFiles(files)
         }
     }
 
     /**
-     * Configures the Emma Code Coverage plugin
+     * Configures the Emma Code Coverage plugin.
      *
-     * <publishers>
-     *     <hudson.plugins.emma.EmmaPublisher>
-     *         <includes>coverage-results/coverage.xml</includes>
-     *         <healthReports>
-     *             <minClass>0</minClass>
-     *             <maxClass>100</maxClass>
-     *             <minMethod>0</minMethod>
-     *             <maxMethod>70</maxMethod>
-     *             <minBlock>0</minBlock>
-     *             <maxBlock>80</maxBlock>
-     *             <minLine>0</minLine>
-     *             <maxLine>80</maxLine>
-     *             <minCondition>0</minCondition>
-     *             <maxCondition>0</maxCondition>
-     *         </healthReports>
-     *     </hudson.plugins.emma.EmmaPublisher>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'emma')
     void emma(String fileSet = '', @DslContext(EmmaContext) Closure emmaClosure = null) {
         EmmaContext emmaContext = new EmmaContext()
         ContextHelper.executeInContext(emmaClosure, emmaContext)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.emma.EmmaPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.emma.EmmaPublisher' {
             includes(fileSet)
             healthReports {
                 minClass(emmaContext.classRange.from)
@@ -1000,59 +801,49 @@ class PublisherContext implements Context {
      * By default the following values are applied. If an instance of a
      * closure is provided, the values from the closure will take effect.
      *
-     * {@code
-     *   <publishers>
-     *      <hudson.plugins.robot.RobotPublisher plugin="robot@1.3.2">
-     *          <outputPath>target/robotframework-reports</outputPath>
-     *          <passThreshold>100.0</passThreshold>
-     *          <unstableThreshold>0.0</unstableThreshold>
-     *          <onlyCritical>false</onlyCritical>
-     *          <reportFileName>report.html</reportFileName>
-     *          <logFileName>log.html</logFileName>
-     *          <outputFileName>output.xml</outputFileName>
-     *      </hudson.plugins.robot.RobotPublisher>
-     *  </publishers>
-     *}
-     * @see https://wiki.jenkins-ci.org/display/JENKINS/Robot+Framework+Plugin
+     * @since 1.21
      */
+    @RequiresPlugin(id = 'robot')
     void publishRobotFrameworkReports(@DslContext(RobotFrameworkContext) Closure robotClosure = null) {
-
-        RobotFrameworkContext context = new RobotFrameworkContext()
-        ContextHelper.executeInContext(robotClosure, context)
-
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        Node robotNode = nodeBuilder.'hudson.plugins.robot.RobotPublisher' {
-            passThreshold context.passThreshold
-            unstableThreshold context.unstableThreshold
-            outputPath context.outputPath
-            onlyCritical context.onlyCritical
-            reportFileName context.reportFileName
-            logFileName context.logFileName
-            outputFileName context.outputFileName
+        if (jobManagement.getPluginVersion('robot')?.isOlderThan(new VersionNumber('1.4.3'))) {
+            jobManagement.logDeprecationWarning('support for Robot Framework plugin versions older than 1.4.3')
         }
 
-        publisherNodes << robotNode
+        RobotFrameworkContext context = new RobotFrameworkContext(jobManagement)
+        ContextHelper.executeInContext(robotClosure, context)
+
+        publisherNodes << new NodeBuilder().'hudson.plugins.robot.RobotPublisher' {
+            passThreshold(context.passThreshold)
+            unstableThreshold(context.unstableThreshold)
+            outputPath(context.outputPath)
+            onlyCritical(context.onlyCritical)
+            reportFileName(context.reportFileName)
+            logFileName(context.logFileName)
+            outputFileName(context.outputFileName)
+            if (!jobManagement.getPluginVersion('robot')?.isOlderThan(new VersionNumber('1.4.3'))) {
+                disableArchiveOutput(context.disableArchiveOutput)
+            }
+            if (!jobManagement.getPluginVersion('robot')?.isOlderThan(new VersionNumber('1.2.1'))) {
+                otherFiles {
+                    context.otherFiles.each { String file ->
+                        string(file)
+                    }
+                }
+            }
+        }
     }
 
     /**
-     * Configures a Build Pipeline Trigger
+     * Configures a Build Pipeline Trigger.
      *
-     * <publishers>
-     *     <au.com.centrumsystems.hudson.plugin.buildpipeline.trigger.BuildPipelineTrigger>
-     *         <configs>
-     *             <hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
-     *                 <properties>ARTIFACT_BUILD_NUMBER=$BUILD_NUMBER</properties>
-     *             </hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
-     *         </configs>
-     *         <downstreamProjectNames>acme-project</downstreamProjectNames>
-     *     </au.com.centrumsystems.hudson.plugin.buildpipeline.trigger.BuildPipelineTrigger>
-     * </publishers>
+     * @since 1.21
      */
+    @RequiresPlugin(id = 'build-pipeline-plugin')
     void buildPipelineTrigger(String downstreamProjectNames, @DslContext(BuildPipelineContext) Closure closure = null) {
-        BuildPipelineContext buildPipelineContext = new BuildPipelineContext()
+        BuildPipelineContext buildPipelineContext = new BuildPipelineContext(jobManagement)
         ContextHelper.executeInContext(closure, buildPipelineContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
+        NodeBuilder nodeBuilder = new NodeBuilder()
         publisherNodes << nodeBuilder.'au.com.centrumsystems.hudson.plugin.buildpipeline.trigger.BuildPipelineTrigger' {
             delegate.downstreamProjectNames(downstreamProjectNames ?: '')
             configs(buildPipelineContext.parameterNodes)
@@ -1062,44 +853,22 @@ class PublisherContext implements Context {
     /**
      * Create commit status notifications on the commits based on the outcome of the build.
      *
-     * <publishers>
-     *     <com.cloudbees.jenkins.GitHubCommitNotifier/>
-     * </publishers>
+     * @since 1.21
      */
+    @RequiresPlugin(id = 'github')
     void githubCommitNotifier() {
         publisherNodes << new NodeBuilder().'com.cloudbees.jenkins.GitHubCommitNotifier'()
     }
 
     /**
-     * <publishers>
-     *     <hudson.plugins.git.GitPublisher>
-     *         <configVersion>2</configVersion>
-     *         <pushMerge>false</pushMerge>
-     *         <pushOnlyIfSuccess>true</pushOnlyIfSuccess>
-     *         <forcePush>false</forcePush>
-     *         <tagsToPush>
-     *             <hudson.plugins.git.GitPublisher_-TagToPush>
-     *                 <targetRepoName>origin</targetRepoName>
-     *                 <tagName>foo-$PIPELINE_VERSION</tagName>
-     *                 <tagMessage>Release $PIPELINE_VERSION</tagMessage>
-     *                 <createTag>true</createTag>
-     *                 <updateTag>false</updateTag>
-     *             </hudson.plugins.git.GitPublisher_-TagToPush>
-     *         </tagsToPush>
-     *         <branchesToPush>
-     *             <hudson.plugins.git.GitPublisher_-BranchToPush>
-     *                 <targetRepoName>origin</targetRepoName>
-     *                 <branchName>master</branchName>
-     *             </hudson.plugins.git.GitPublisher_-BranchToPush>
-     *         </branchesToPush>
-     *     </hudson.plugins.git.GitPublisher>
-     * </publishers>
+     * @since 1.22
      */
+    @RequiresPlugin(id = 'git')
     void git(@DslContext(GitPublisherContext) Closure gitPublisherClosure) {
         GitPublisherContext context = new GitPublisherContext(jobManagement)
         ContextHelper.executeInContext(gitPublisherClosure, context)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.git.GitPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.git.GitPublisher' {
             configVersion(2)
             pushMerge(context.pushMerge)
             pushOnlyIfSuccess(context.pushOnlyIfSuccess)
@@ -1112,51 +881,14 @@ class PublisherContext implements Context {
     }
 
     /**
-     * <publishers>
-     *     <com.flowdock.jenkins.FlowdockNotifier>
-     *         <flowToken>hash</flowToken>
-     *         <notificationTags/>
-     *         <chatNotification>false</chatNotification>
-     *         <notifyMap>
-     *             <entry>
-     *                 <com.flowdock.jenkins.BuildResult>ABORTED</com.flowdock.jenkins.BuildResult>
-     *                 <boolean>false</boolean>
-     *             </entry>
-     *             <entry>
-     *                 <com.flowdock.jenkins.BuildResult>SUCCESS</com.flowdock.jenkins.BuildResult>
-     *                 <boolean>true</boolean>
-     *             </entry>
-     *             <entry>
-     *                 <com.flowdock.jenkins.BuildResult>FIXED</com.flowdock.jenkins.BuildResult>
-     *                 <boolean>true</boolean>
-     *             </entry>
-     *             <entry>
-     *                 <com.flowdock.jenkins.BuildResult>UNSTABLE</com.flowdock.jenkins.BuildResult>
-     *                 <boolean>false</boolean>
-     *             </entry>
-     *             <entry>
-     *                 <com.flowdock.jenkins.BuildResult>FAILURE</com.flowdock.jenkins.BuildResult>
-     *                 <boolean>true</boolean>
-     *             </entry>
-     *             <entry>
-     *                 <com.flowdock.jenkins.BuildResult>NOT_BUILT</com.flowdock.jenkins.BuildResult>
-     *                 <boolean>false</boolean>
-     *             </entry>
-     *         </notifyMap>
-     *         <notifySuccess>true</notifySuccess>
-     *         <notifyFailure>true</notifyFailure>
-     *         <notifyFixed>true</notifyFixed>
-     *         <notifyUnstable>false</notifyUnstable>
-     *         <notifyAborted>false</notifyAborted>
-     *         <notifyNotBuilt>false</notifyNotBuilt>
-     *     </com.flowdock.jenkins.FlowdockNotifier>
-     * </publishers>
+     * @since 1.23
      */
+    @RequiresPlugin(id = 'jenkins-flowdock-plugin')
     void flowdock(String token, @DslContext(FlowdockPublisherContext) Closure flowdockPublisherClosure = null) {
         FlowdockPublisherContext context = new FlowdockPublisherContext()
         ContextHelper.executeInContext(flowdockPublisherClosure, context)
 
-        publisherNodes << NodeBuilder.newInstance().'com.flowdock.jenkins.FlowdockNotifier' {
+        publisherNodes << new NodeBuilder().'com.flowdock.jenkins.FlowdockNotifier' {
             flowToken(token)
             notificationTags(context.notificationTags.join(','))
             chatNotification(context.chat)
@@ -1195,32 +927,29 @@ class PublisherContext implements Context {
         }
     }
 
+    /**
+     * @since 1.23
+     */
     void flowdock(String[] tokens, @DslContext(FlowdockPublisherContext) Closure flowdockPublisherClosure = null) {
         // Validate values
-        assert tokens != null && tokens.length > 0, 'Flowdock publish requires at least one flow token'
+        Preconditions.checkArgument(
+                tokens != null && tokens.length > 0,
+                'Flowdock publish requires at least one flow token'
+        )
         flowdock(tokens.join(','), flowdockPublisherClosure)
     }
 
     /**
      * Configures the StashNotifier plugin.
      *
-     * <publishers>
-     *     <org.jenkinsci.plugins.stashNotifier.StashNotifier>
-     *         <stashServerBaseUrl/>
-     *         <stashUserName/>
-     *         <stashUserPassword>y1/kpoWAZo+gBl7xAmdWIQ==</stashUserPassword>
-     *         <ignoreUnverifiedSSLPeer>false</ignoreUnverifiedSSLPeer>
-     *         <commitSha1/>
-     *         <includeBuildNumberInKey>false</includeBuildNumberInKey>
-     *     </org.jenkinsci.plugins.stashNotifier.StashNotifier>
-     * </publishers>
-     *
-     * See https://wiki.jenkins-ci.org/display/JENKINS/StashNotifier+Plugin
+     * @since 1.23
      */
+    @RequiresPlugin(id = 'stashNotifier')
     void stashNotifier(@DslContext(StashNotifierContext) Closure stashNotifierClosure = null) {
         StashNotifierContext context = new StashNotifierContext()
         ContextHelper.executeInContext(stashNotifierClosure, context)
-        publisherNodes << NodeBuilder.newInstance().'org.jenkinsci.plugins.stashNotifier.StashNotifier' {
+
+        publisherNodes << new NodeBuilder().'org.jenkinsci.plugins.stashNotifier.StashNotifier' {
             stashServerBaseUrl()
             stashUserName()
             stashUserPassword()
@@ -1233,41 +962,33 @@ class PublisherContext implements Context {
     /**
      * Configures the FlexiblePublish plugin.
      *
-     * https://wiki.jenkins-ci.org/display/JENKINS/Flexible+Publish+Plugin
-     *
-     * <org.jenkins__ci.plugins.flexible__publish.FlexiblePublisher>
-     *     <publishers>
-     *         <org.jenkins__ci.plugins.flexible__publish.ConditionalPublisher>
-     *             <condition class="org.jenkins_ci.plugins.run_condition.core.AlwaysRun"/>
-     *             <publisher class="hudson.tasks.ArtifactArchiver">
-     *                 <artifacts/>
-     *                 <latestOnly>false</latestOnly>
-     *                 <allowEmptyArchive>false</allowEmptyArchive>
-     *                 <onlyIfSuccessful>false</onlyIfSuccessful>
-     *             </publisher>
-     *             <runner class="org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail"/>
-     *         </org.jenkins__ci.plugins.flexible__publish.ConditionalPublisher>
-     *     </publishers>
-     * </org.jenkins__ci.plugins.flexible__publish.FlexiblePublisher>
+     * @since 1.26
      */
+    @RequiresPlugin(id = 'flexible-publish')
     void flexiblePublish(@DslContext(FlexiblePublisherContext) Closure flexiblePublishClosure) {
-        FlexiblePublisherContext context = new FlexiblePublisherContext(jobManagement)
+        if (jobManagement.getPluginVersion('flexible-publish')?.isOlderThan(new VersionNumber('0.13'))) {
+            jobManagement.logDeprecationWarning('support for Flexible Publish plugin versions older than 0.13')
+        }
+
+        FlexiblePublisherContext context = new FlexiblePublisherContext(jobManagement, item)
         ContextHelper.executeInContext(flexiblePublishClosure, context)
 
-        Node action = context.action
-        Preconditions.checkArgument(action != null, 'no publisher or build step specified')
+        Preconditions.checkArgument(!context.actions.empty, 'no publisher or build step specified')
 
         publisherNodes << new NodeBuilder().'org.jenkins__ci.plugins.flexible__publish.FlexiblePublisher' {
             delegate.publishers {
                 'org.jenkins__ci.plugins.flexible__publish.ConditionalPublisher' {
-
                     condition(class: context.condition.conditionClass) {
                         context.condition.addArgs(delegate)
                     }
-                    publisher(
-                            class: new XmlFriendlyNameCoder().decodeAttribute(action.name().toString()),
-                            action.value()
-                    )
+                    if (jobManagement.getPluginVersion('flexible-publish')?.isOlderThan(new VersionNumber('0.13'))) {
+                        publisher(
+                                class: new XmlFriendlyNameCoder().decodeAttribute(context.actions[0].name().toString()),
+                                context.actions[0].value()
+                        )
+                    } else {
+                        publisherList(context.actions)
+                    }
                     runner(class: 'org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail')
                 }
             }
@@ -1278,14 +999,9 @@ class PublisherContext implements Context {
      *
      * Configures the Maven Deployment Linker plugin.
      *
-     * <publishers>
-     *     <hudson.plugins.mavendeploymentlinker.MavenDeploymentLinkerRecorder>
-     *         <regexp>*.tar.gz</regexp>
-     *     </hudson.plugins.mavendeploymentlinker.MavenDeploymentLinkerRecorder>
-     * </publishers
-     *
-     * See https://wiki.jenkins-ci.org/display/JENKINS/Maven+Deployment+Linker
+     * @since 1.23
      */
+    @RequiresPlugin(id = 'maven-deployment-linker')
     void mavenDeploymentLinker(String regex) {
         publisherNodes << new NodeBuilder().'hudson.plugins.mavendeploymentlinker.MavenDeploymentLinkerRecorder' {
             regexp(regex)
@@ -1295,31 +1011,9 @@ class PublisherContext implements Context {
     /**
      * Configures the post build action of the Workspace Cleanup Plugin to delete the workspace.
      *
-     * <publishers>
-     *     <hudson.plugins.ws__cleanup.WsCleanup>
-     *         <patterns>
-     *             <hudson.plugins.ws__cleanup.Pattern>
-     *                 <pattern>*.java</pattern>
-     *                 <type>INCLUDE</type>
-     *             </hudson.plugins.ws__cleanup.Pattern>
-     *             <hudson.plugins.ws__cleanup.Pattern>
-     *                 <pattern>*.log</pattern>
-     *                 <type>EXCLUDE</type>
-     *             </hudson.plugins.ws__cleanup.Pattern>
-     *         </patterns>
-     *         <deleteDirs>false</deleteDirs>
-     *         <cleanWhenSuccess>true</cleanWhenSuccess>
-     *         <cleanWhenUnstable>true</cleanWhenUnstable>
-     *         <cleanWhenFailure>true</cleanWhenFailure>
-     *         <cleanWhenNotBuilt>true</cleanWhenNotBuilt>
-     *         <cleanWhenAborted>true</cleanWhenAborted>
-     *         <notFailBuild>false</notFailBuild>
-     *         <externalDelete>rm</externalDelete>
-     *     </hudson.plugins.ws__cleanup.WsCleanup>
-     * </publishers>
-     *
-     * See https://wiki.jenkins-ci.org/display/JENKINS/Workspace+Cleanup+Plugin
+     * @since 1.23
      */
+    @RequiresPlugin(id = 'ws-cleanup')
     void wsCleanup(@DslContext(PostBuildCleanupContext) Closure closure = null) {
         PostBuildCleanupContext context = new PostBuildCleanupContext()
         ContextHelper.executeInContext(closure, context)
@@ -1338,24 +1032,16 @@ class PublisherContext implements Context {
     }
 
     /**
-     * <publishers>
-     *     <org.jenkinsci.plugins.rundeck.RundeckNotifier>
-     *         <jobId>b4c1a982-d872-4a2b-aba4-f355371b2a8f</jobId>
-     *         <options> key1=value1 key2=value2 </options>
-     *         <nodeFilters> key1=value1 key2=value2 </nodeFilters>
-     *         <tag/>
-     *         <shouldWaitForRundeckJob>true</shouldWaitForRundeckJob>
-     *         <shouldFailTheBuild>true</shouldFailTheBuild>
-     *     </org.jenkinsci.plugins.rundeck.RundeckNotifier>
-     * </publishers>
+     * @since 1.24
      */
+    @RequiresPlugin(id = 'rundeck')
     void rundeck(String jobIdentifier, @DslContext(RundeckContext) Closure rundeckClosure = null) {
         Preconditions.checkArgument(!Strings.isNullOrEmpty(jobIdentifier), 'jobIdentifier cannot be null or empty')
 
         RundeckContext rundeckContext = new RundeckContext()
         ContextHelper.executeInContext(rundeckClosure, rundeckContext)
 
-        publisherNodes << NodeBuilder.newInstance().'org.jenkinsci.plugins.rundeck.RundeckNotifier' {
+        publisherNodes << new NodeBuilder().'org.jenkinsci.plugins.rundeck.RundeckNotifier' {
             jobId jobIdentifier
             options rundeckContext.options.collect { key, value -> "${key}=${value}" }.join('\n')
             nodeFilters rundeckContext.nodeFilters.collect { key, value -> "${key}=${value}" }.join('\n')
@@ -1366,34 +1052,16 @@ class PublisherContext implements Context {
     }
 
     /**
-     * <publishers>
-     *     <hudson.plugins.s3.S3BucketPublisher>
-     *         <profileName>profile</profileName>
-     *         <entries>
-     *             <hudson.plugins.s3.Entry>
-     *                 <bucket>b</bucket>
-     *                 <sourceFile>a</sourceFile>
-     *                 <noUploadOnFailure>true</noUploadOnFailure>
-     *                 <uploadFromSlave>true</uploadFromSlave>
-     *                 <managedArtifacts>true</managedArtifacts>
-     *             </hudson.plugins.s3.Entry>
-     *         </entries>
-     *         <userMetadata>
-     *             <hudson.plugins.s3.MetadataPair>
-     *                 <key>foo</key>
-     *                 <value>bar</value>
-     *             </hudson.plugins.s3.MetadataPair>
-     *         </userMetadata>
-     *     </hudson.plugins.s3.S3BucketPublisher>
-     * </publisher>
+     * @since 1.26
      */
+    @RequiresPlugin(id = 's3')
     void s3(String profile, @DslContext(S3BucketPublisherContext) Closure s3PublisherClosure) {
         checkArgument(!isNullOrEmpty(profile), 'profile must be specified')
 
-        S3BucketPublisherContext context = new S3BucketPublisherContext()
+        S3BucketPublisherContext context = new S3BucketPublisherContext(jobManagement)
         ContextHelper.executeInContext(s3PublisherClosure, context)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.s3.S3BucketPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.s3.S3BucketPublisher' {
             profileName(profile)
             entries(context.entries)
             userMetadata(context.metadata)
@@ -1401,41 +1069,28 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the findbugs publisher
+     * Configures the findbugs publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.findbugs.FindBugsPublisher>
-     *   ...
-     *   <pattern>**&#47;findbugsXml.xml</pattern>
-     *   <isRankActivated>false</isRankActivated>
-     * </hudson.plugins.findbugs.FindBugsPublisher>
-     * }
-     * </pre>
-     **/
+     * @since 1.17
+     */
+    @RequiresPlugin(id = 'findbugs')
     void findbugs(String pattern, boolean isRankActivated = false,
                   @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         StaticAnalysisContext staticAnalysisContext = new StaticAnalysisContext()
         ContextHelper.executeInContext(staticAnalysisClosure, staticAnalysisContext)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.findbugs.FindBugsPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.findbugs.FindBugsPublisher' {
             addStaticAnalysisContextAndPattern(delegate, staticAnalysisContext, pattern)
             delegate.isRankActivated(isRankActivated)
         }
     }
 
     /**
-     * Configures the PMD Publisher
+     * Configures the PMD Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.pmd.PmdPublisher>
-     *   ...
-     *   <pattern>pmd.xml</pattern>
-     * </hudson.plugins.pmd.PmdPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'pmd')
     void pmd(String pattern, @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         publisherNodes << createDefaultStaticAnalysisNode(
                 'hudson.plugins.pmd.PmdPublisher',
@@ -1445,17 +1100,11 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Checkstyle Publisher
+     * Configures the Checkstyle Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.checkstyle.CheckStylePublisher>
-     *   ...
-     *   <pattern>checkstyle.xml</pattern>
-     * </hudson.plugins.checkstyle.CheckStylePublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'checkstyle')
     void checkstyle(String pattern, @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         publisherNodes << createDefaultStaticAnalysisNode(
                 'hudson.plugins.checkstyle.CheckStylePublisher',
@@ -1465,17 +1114,11 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the JsHint checkstyle Publisher
+     * Configures the JsHint checkstyle Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.jshint.CheckStylePublisher>
-     *   ...
-     *   <pattern>checkstyle.xml</pattern>
-     * </hudson.plugins.jshint.CheckStylePublisher>
-     * }
-     * </pre>
+     * @since 1.20
      */
+    @RequiresPlugin(id = 'jshint-checkstyle')
     void jshint(String pattern,
                 @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         publisherNodes << createDefaultStaticAnalysisNode(
@@ -1486,25 +1129,17 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the DRY Publisher
+     * Configures the DRY Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.dry.DryPublisher>
-     *   ...
-     *   <pattern>cpd.xml</pattern>
-     *   <highThreshold>85</highThreshold>
-     *   <normalThreshold>13</normalThreshold>
-     * </hudson.plugins.dry.DryPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'dry')
     void dry(String pattern, highThreshold = 50, normalThreshold = 25,
              @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         StaticAnalysisContext staticAnalysisContext = new StaticAnalysisContext()
         ContextHelper.executeInContext(staticAnalysisClosure, staticAnalysisContext)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.dry.DryPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.dry.DryPublisher' {
             addStaticAnalysisContextAndPattern(delegate, staticAnalysisContext, pattern)
             delegate.highThreshold(highThreshold)
             delegate.normalThreshold(normalThreshold)
@@ -1512,28 +1147,17 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Task Scanner Publisher
+     * Configures the Task Scanner Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.tasks.TasksPublisher>
-     *   ...
-     *   <pattern>*.java</pattern>
-     *   <high>FIXM</high>
-     *   <normal>TOD</normal>
-     *   <low>LOW</low>
-     *   <ignoreCase>true</ignoreCase>
-     *   <excludePattern>*.groovy</excludePattern>
-     * </hudson.plugins.tasks.TasksPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'tasks')
     void tasks(String pattern, excludePattern = '', high = '', normal = '', low = '', ignoreCase = false,
                @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         StaticAnalysisContext staticAnalysisContext = new StaticAnalysisContext()
         ContextHelper.executeInContext(staticAnalysisClosure, staticAnalysisContext)
 
-        publisherNodes << NodeBuilder.newInstance().'hudson.plugins.tasks.TasksPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.tasks.TasksPublisher' {
             addStaticAnalysisContextAndPattern(delegate, staticAnalysisContext, pattern)
             delegate.high(high)
             delegate.normal(normal)
@@ -1544,17 +1168,11 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the CCM Publisher
+     * Configures the CCM Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.ccm.CcmPublisher>
-     *   ...
-     *   <pattern>ccm.xml</pattern>
-     * </hudson.plugins.ccm.CcmPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'ccm')
     void ccm(String pattern, @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         publisherNodes << createDefaultStaticAnalysisNode(
                 'hudson.plugins.ccm.CcmPublisher',
@@ -1564,17 +1182,11 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Android Lint Publisher
+     * Configures the Android Lint Publisher.
      *
-     * <pre>
-     * {@code
-     * <org.jenkinsci.plugins.android__lint.LintPublisher>
-     *   ...
-     *   <pattern>lint.xml</pattern>
-     * </org.jenkinsci.plugins.android__lint.LintPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'android-lint')
     void androidLint(String pattern, @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         publisherNodes << createDefaultStaticAnalysisNode(
                 'org.jenkinsci.plugins.android__lint.LintPublisher',
@@ -1584,17 +1196,11 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the OWASP Dependency-Check Publisher
+     * Configures the OWASP Dependency-Check Publisher.
      *
-     * <pre>
-     * {@code
-     * <org.jenkinsci.plugins.DependencyCheck.DependencyCheckPublisher>
-     *   ...
-     *   <pattern>dep.xml</pattern>
-     * </org.jenkinsci.plugins.DependencyCheck.DependencyCheckPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'dependency-check-jenkins-plugin')
     void dependencyCheck(String pattern, @DslContext(StaticAnalysisContext) Closure staticAnalysisClosure = null) {
         publisherNodes << createDefaultStaticAnalysisNode(
                 'org.jenkinsci.plugins.DependencyCheck.DependencyCheckPublisher',
@@ -1604,36 +1210,17 @@ class PublisherContext implements Context {
     }
 
     /**
-     * Configures the Compiler Warnings Publisher
+     * Configures the Compiler Warnings Publisher.
      *
-     * <pre>
-     * {@code
-     * <hudson.plugins.warnings.WarningsPublisher>
-     *   ...
-     *   <includePattern>.*include.*</includePattern>
-     *   <excludePattern>.*exclude.*</excludePattern>
-     *   <consoleParsers>
-     *     <hudson.plugins.warnings.ConsoleParser>
-     *       <parserName>Java Compiler (javac)</parserName>
-     *     </hudson.plugins.warnings.ConsoleParser>
-     *   </consoleParsers>
-     *   <parserConfigurations>
-     *     <hudson.plugins.warnings.ParserConfiguration>
-     *       <pattern>*.log</pattern>
-     *       <parserName>Java Compiler (javac)</parserName>
-     *     </hudson.plugins.warnings.ParserConfiguration>
-     *   </parserConfigurations>
-     * </hudson.plugins.warnings.WarningsPublisher>
-     * }
-     * </pre>
+     * @since 1.17
      */
+    @RequiresPlugin(id = 'warnings', minimumVersion = '4.0')
     void warnings(List consoleParsers, Map parserConfigurations = [:],
                   @DslContext(WarningsContext) Closure warningsClosure = null) {
-        jobManagement.requireMinimumPluginVersion('warnings', '4.0')
         WarningsContext warningsContext = new WarningsContext()
         ContextHelper.executeInContext(warningsClosure,  warningsContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
+        NodeBuilder nodeBuilder = new NodeBuilder()
         publisherNodes << nodeBuilder.'hudson.plugins.warnings.WarningsPublisher' {
             addStaticAnalysisContext(delegate,  warningsContext)
             includePattern(warningsContext.includePattern)
@@ -1659,42 +1246,14 @@ class PublisherContext implements Context {
     /**
      * Configures the Analysis Collector Publisher.
      *
-     * <hudson.plugins.analysis.collector.AnalysisPublisher>
-     *     <healthy/>
-     *     <unHealthy/>
-     *     <thresholdLimit>low</thresholdLimit>
-     *     <pluginName>[ANALYSIS-COLLECTOR]</pluginName>
-     *     <defaultEncoding/>
-     *     <canRunOnFailed>false</canRunOnFailed>
-     *     <useStableBuildAsReference>false</useStableBuildAsReference>
-     *     <useDeltaValues>false</useDeltaValues>
-     *     <thresholds>
-     *         <unstableTotalAll/>
-     *         <unstableTotalHigh/>
-     *         <unstableTotalNormal/>
-     *         <unstableTotalLow/>
-     *         <failedTotalAll/>
-     *         <failedTotalHigh/>
-     *         <failedTotalNormal/>
-     *         <failedTotalLow/>
-     *     </thresholds>
-     *     <shouldDetectModules>false</shouldDetectModules>
-     *     <dontComputeNew>true</dontComputeNew>
-     *     <doNotResolveRelativePaths>true</doNotResolveRelativePaths>
-     *     <isCheckStyleDeactivated>false</isCheckStyleDeactivated>
-     *     <isDryDeactivated>true</isDryDeactivated>
-     *     <isFindBugsDeactivated>false</isFindBugsDeactivated>
-     *     <isPmdDeactivated>false</isPmdDeactivated>
-     *     <isOpenTasksDeactivated>true</isOpenTasksDeactivated>
-     *     <isWarningsDeactivated>true</isWarningsDeactivated>
-     * </hudson.plugins.analysis.collector.AnalysisPublisher>
+     * @since 1.26
      */
+    @RequiresPlugin(id = 'analysis-collector')
     void analysisCollector(@DslContext(AnalysisCollectorContext) Closure analysisCollectorClosure = null) {
         AnalysisCollectorContext analysisCollectorContext = new AnalysisCollectorContext()
         ContextHelper.executeInContext(analysisCollectorClosure,  analysisCollectorContext)
 
-        NodeBuilder nodeBuilder = NodeBuilder.newInstance()
-        publisherNodes << nodeBuilder.'hudson.plugins.analysis.collector.AnalysisPublisher' {
+        publisherNodes << new NodeBuilder().'hudson.plugins.analysis.collector.AnalysisPublisher' {
             addStaticAnalysisContext(delegate, analysisCollectorContext)
             isCheckStyleDeactivated(!analysisCollectorContext.includeCheckstyle)
             isDryDeactivated(!analysisCollectorContext.includeDry)
@@ -1705,12 +1264,157 @@ class PublisherContext implements Context {
         }
     }
 
+    /**
+     * @since 1.31
+     */
+    @RequiresPlugin(id = 'postbuildscript')
+    void postBuildScripts(@DslContext(PostBuildScriptsContext) Closure closure) {
+        PostBuildScriptsContext context = new PostBuildScriptsContext(jobManagement, item)
+        ContextHelper.executeInContext(closure, context)
+
+        publisherNodes << new NodeBuilder().'org.jenkinsci.plugins.postbuildscript.PostBuildScript' {
+            buildSteps(context.stepContext.stepNodes)
+            scriptOnlyIfSuccess(context.onlyIfBuildSucceeds)
+        }
+    }
+
+    /**
+     * @since 1.31
+     */
+    @RequiresPlugin(id = 'sonar')
+    void sonar(@DslContext(SonarContext) Closure sonarClosure = null) {
+        SonarContext sonarContext = new SonarContext()
+        ContextHelper.executeInContext(sonarClosure, sonarContext)
+
+        publisherNodes << new NodeBuilder().'hudson.plugins.sonar.SonarPublisher' {
+            jdk('(Inherit From Job)')
+            branch(sonarContext.branch ?: '')
+            language()
+            mavenOpts()
+            jobAdditionalProperties()
+            if (sonarContext.overrideTriggers) {
+                triggers {
+                    skipScmCause(false)
+                    skipUpstreamCause(false)
+                    envVar(sonarContext.sonarTriggersContext.skipIfEnvironmentVariable ?: '')
+                }
+            }
+            mavenInstallationName('(Inherit From Job)')
+            rootPom()
+            settings(class: 'jenkins.mvn.DefaultSettingsProvider')
+            globalSettings(class: 'jenkins.mvn.DefaultGlobalSettingsProvider')
+            usePrivateRepository(false)
+        }
+    }
+
+    /**
+     * @since 1.33
+     */
+    @RequiresPlugin(id = 'naginator', minimumVersion = '1.15')
+    void retryBuild(@DslContext(NaginatorContext) Closure naginatorClosure = null) {
+        NaginatorContext naginatorContext = new NaginatorContext()
+        ContextHelper.executeInContext(naginatorClosure, naginatorContext)
+
+        Node naginatorNode = new NodeBuilder().'com.chikli.hudson.plugin.naginator.NaginatorPublisher' {
+            regexpForRerun()
+            rerunIfUnstable(naginatorContext.rerunIfUnstable)
+            rerunMatrixPart(false)
+            checkRegexp(false)
+            maxSchedule(naginatorContext.retryLimit)
+        }
+        naginatorNode.append(naginatorContext.delay)
+        publisherNodes << naginatorNode
+    }
+
+    /**
+     * Configures the GitHub pull request builder plugin to perform an automatic request after a successful build.
+     *
+     * @since 1.33
+     */
+    @RequiresPlugin(id = 'ghprb', minimumVersion = '1.17')
+    void mergePullRequest(@DslContext(PullRequestPublisherContext) Closure contextClosure = null) {
+        PullRequestPublisherContext pullRequestPublisherContext = new PullRequestPublisherContext()
+        ContextHelper.executeInContext(contextClosure, pullRequestPublisherContext)
+
+        publisherNodes << new NodeBuilder().'org.jenkinsci.plugins.ghprb.GhprbPullRequestMerge' {
+            onlyAdminsMerge(pullRequestPublisherContext.onlyAdminsMerge)
+            disallowOwnCode(pullRequestPublisherContext.disallowOwnCode)
+            onlyTriggerPhrase(pullRequestPublisherContext.onlyTriggerPhrase)
+            mergeComment(pullRequestPublisherContext.mergeComment ?: '')
+        }
+    }
+
+    /**
+     * Configures the Build Publisher plugin to publish builds to a 'public' Jenkins server.
+     *
+     * @since 1.33
+     */
+    @RequiresPlugin(id = 'build-publisher', minimumVersion = '1.20')
+    void publishBuild(@DslContext(PublishBuildContext) Closure contextClosure = null) {
+        PublishBuildContext publishBuildContext = new PublishBuildContext()
+        ContextHelper.executeInContext(contextClosure, publishBuildContext)
+
+        publisherNodes << new NodeBuilder().'hudson.plugins.build__publisher.BuildPublisher' {
+            publishUnstableBuilds(publishBuildContext.publishUnstable)
+            publishFailedBuilds(publishBuildContext.publishFailed)
+            if (publishBuildContext.discardOldBuilds) {
+                logRotator {
+                    daysToKeep(publishBuildContext.daysToKeep)
+                    numToKeep(publishBuildContext.numToKeep)
+                    artifactDaysToKeep(publishBuildContext.artifactDaysToKeep)
+                    artifactNumToKeep(publishBuildContext.artifactNumToKeep)
+                }
+            }
+        }
+    }
+
+    /**
+     * Allows notifications to be set to HipChat.
+     *
+     * @since 1.33
+     */
+    @RequiresPlugin(id = 'hipchat', minimumVersion = '0.1.9')
+    void hipChat(@DslContext(HipChatPublisherContext) Closure hipChatClosure = null) {
+        HipChatPublisherContext hipChatContext = new HipChatPublisherContext()
+        ContextHelper.executeInContext(hipChatClosure, hipChatContext)
+
+        publisherNodes << new NodeBuilder().'jenkins.plugins.hipchat.HipChatNotifier' {
+            token(hipChatContext.token ?: '')
+            room(hipChatContext.rooms.join(','))
+            startNotification(hipChatContext.notifyBuildStart)
+            notifySuccess(hipChatContext.notifySuccess)
+            notifyAborted(hipChatContext.notifyAborted)
+            notifyNotBuilt(hipChatContext.notifyNotBuilt)
+            notifyUnstable(hipChatContext.notifyUnstable)
+            notifyFailure(hipChatContext.notifyFailure)
+            notifyBackToNormal(hipChatContext.notifyBackToNormal)
+            startJobMessage(hipChatContext.startJobMessage ?: '')
+            completeJobMessage(hipChatContext.completeJobMessage ?: '')
+        }
+    }
+
+    /**
+     * @since 1.34
+     */
+    @RequiresPlugin(id = 'publish-over-ssh', minimumVersion = '1.12')
+    void publishOverSsh(@DslContext(PublishOverSshContext) Closure publishOverSshClosure) {
+        PublishOverSshContext publishOverSshContext = new PublishOverSshContext()
+        ContextHelper.executeInContext(publishOverSshClosure, publishOverSshContext)
+
+        Preconditions.checkArgument(!publishOverSshContext.servers.empty, 'At least 1 server must be configured')
+
+        publisherNodes << new NodeBuilder().'jenkins.plugins.publish__over__ssh.BapSshPublisherPlugin' {
+            consolePrefix('SSH: ')
+            currentNode.append(publishOverSshContext.node)
+        }
+    }
+
     private static createDefaultStaticAnalysisNode(String publisherClassName, Closure staticAnalysisClosure,
                                                    String pattern) {
         StaticAnalysisContext staticAnalysisContext = new StaticAnalysisContext()
         ContextHelper.executeInContext(staticAnalysisClosure, staticAnalysisContext)
 
-        NodeBuilder.newInstance()."${publisherClassName}" {
+        new NodeBuilder()."${publisherClassName}" {
             addStaticAnalysisContextAndPattern(delegate, staticAnalysisContext, pattern)
         }
     }
@@ -1748,4 +1452,5 @@ class PublisherContext implements Context {
         addStaticAnalysisContext(nodeBuilder, context)
         addStaticAnalysisPattern(nodeBuilder, pattern)
     }
+
 }
