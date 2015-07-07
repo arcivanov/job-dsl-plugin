@@ -16,6 +16,8 @@ import static com.google.common.base.Strings.isNullOrEmpty
 import static javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation.LOCAL_TO_WORKSPACE
 
 class StepContext extends AbstractExtensibleContext {
+    private final static VALID_BUILD_RESULTS = ['SUCCESS', 'UNSTABLE', 'FAILURE', 'ABORTED', 'CYCLE']
+
     final List<Node> stepNodes = []
 
     StepContext(JobManagement jobManagement, Item item) {
@@ -292,6 +294,10 @@ class StepContext extends AbstractExtensibleContext {
      */
     @RequiresPlugin(id = 'maven-plugin')
     void maven(@DslContext(MavenContext) Closure closure) {
+        if (jobManagement.getPluginVersion('maven-plugin')?.isOlderThan(new VersionNumber('2.3'))) {
+            jobManagement.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
+        }
+
         MavenContext mavenContext = new MavenContext(jobManagement)
         ContextHelper.executeInContext(closure, mavenContext)
 
@@ -491,7 +497,7 @@ class StepContext extends AbstractExtensibleContext {
      */
     @RequiresPlugin(id = 'conditional-buildstep')
     void conditionalSteps(@DslContext(ConditionalStepsContext) Closure conditionalStepsClosure) {
-        ConditionalStepsContext conditionalStepsContext = new ConditionalStepsContext(jobManagement, item)
+        ConditionalStepsContext conditionalStepsContext = new ConditionalStepsContext(jobManagement, newInstance())
         ContextHelper.executeInContext(conditionalStepsClosure, conditionalStepsContext)
 
         stepNodes << new NodeBuilder().'org.jenkinsci.plugins.conditionalbuildstep.ConditionalBuilder' {
@@ -499,7 +505,7 @@ class StepContext extends AbstractExtensibleContext {
                 conditionalStepsContext.runCondition.addArgs(delegate)
             }
             runner(class: conditionalStepsContext.runnerClass)
-            conditionalbuilders(conditionalStepsContext.stepNodes)
+            conditionalbuilders(conditionalStepsContext.stepContext.stepNodes)
         }
     }
 
@@ -607,6 +613,20 @@ class StepContext extends AbstractExtensibleContext {
     }
 
     /**
+     * @since 1.35
+     */
+    @RequiresPlugin(id = 'fail-the-build-plugin', minimumVersion = '1.0')
+    void setBuildResult(String result) {
+        Preconditions.checkArgument(
+                VALID_BUILD_RESULTS.contains(result),
+                "result must be on of ${VALID_BUILD_RESULTS.join(', ')}"
+        )
+        stepNodes << new NodeBuilder().'org.jenkins__ci.plugins.fail__the__build.FixResultBuilder' {
+            'defaultResultName'(result)
+        }
+    }
+
+    /**
      * @since 1.25
      */
     void vSpherePowerOff(String server, String vm) {
@@ -703,5 +723,12 @@ class StepContext extends AbstractExtensibleContext {
             signPackage(context.signPackage)
             buildEvenWhenThereAreNoChanges(context.alwaysBuild)
         }
+    }
+
+    /**
+     * @since 1.35
+     */
+    protected StepContext newInstance() {
+        new StepContext(jobManagement, item)
     }
 }

@@ -1,6 +1,12 @@
 ## Migrating to 1.35
 
-## S3
+### Maven
+
+Support for versions older than 2.3 of the
+[[Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+### S3
 
 Support for versions 0.6 and earlier of the S3 Plugin is [[deprecated|Deprecation-Policy]] and will be removed. The
 region identifiers have changed with version 0.7 of the S3 Plugin.
@@ -26,6 +32,54 @@ job('example') {
     }
 }
 ```
+
+## GitHub Pull Request Builder
+
+Support for versions older than 1.15-0 of the
+[GitHub Pull Request Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+## Conditional Build Steps
+
+Usage build steps directly in the `conditionalSteps` context is [[deprecated|Deprecation-Policy]] and will be removed.
+
+DSL prior to 1.35
+```groovy
+job('example') {
+    steps {
+        conditionalSteps {
+            condition {
+                stringsMatch('${SOME_PARAMETER}', 'pants', false)
+            }
+            runner('Fail')
+            shell("echo 'just one step'")
+        }
+    }
+}
+```
+
+DSL since to 1.35
+```groovy
+job('example') {
+    steps {
+        conditionalSteps {
+            condition {
+                stringsMatch('${SOME_PARAMETER}', 'pants', false)
+            }
+            runner('Fail')
+            steps {
+                shell("echo 'just one step'")
+            }
+        }
+    }
+}
+```
+
+### Matrix Authorization
+
+Support for versions older than 1.2 of the
+[Matrix Authorization Strategy Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Matrix+Authorization+Strategy+Plugin)
+is [[deprecated|Deprecation-Policy]] and will be removed.
 
 ## Migrating to 1.34
 

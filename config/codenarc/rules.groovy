@@ -30,10 +30,18 @@ ruleset {
     ruleset('rulesets/exceptions.xml')
 
     ruleset('rulesets/formatting.xml') {
+        // empty blocks like {} are OK
+        SpaceAfterOpeningBrace {
+            ignoreEmptyBlock = true
+        }
         // enforce at least one space after map entry colon
         SpaceAroundMapEntryColon {
             characterAfterColonRegex = /\s/
             characterBeforeColonRegex = /./
+        }
+        // empty blocks like {} are OK
+        SpaceBeforeClosingBrace {
+            ignoreEmptyBlock = true
         }
 
         // we don't care for now

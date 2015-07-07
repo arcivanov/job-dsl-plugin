@@ -41,6 +41,7 @@ freeStyleJob(String name) { // since 1.30
         permission(String permission, String user)
         permission(Permissions perm, String user) // deprecated since 1.31
         permissionAll(String user)
+        blocksInheritance(boolean blocksInheritance = true) // since 1.35 
     }
     parameters {
         booleanParam(String parameterName, boolean defaultValue = false,
@@ -124,7 +125,6 @@ freeStyleJob(String name) { // since 1.30
         timestamps()
         toolenv(String... tools)
         xvfb(String installation, Closure xvfbClosure = null) // since 1.31
-        xvnc(boolean takeScreenshot) // deprecated
         xvnc(Closure xvncClosure = null) // since 1.26
     }
     properties { // since 1.33
@@ -187,6 +187,7 @@ freeStyleJob(String name) { // since 1.30
         resolveArtifacts(Closure repositoryConnectorClosure) // since 1.29
         sbt(String sbtName = null, String actions = null, String sbtFlags = null,
             String jvmFlags = null, String subdirPath = null, Closure configure = null)
+        setBuildResult(String result) // since 1.35
         shell(String command)
         systemGroovyCommand(String command, Closure systemGroovyClosure = null)
         systemGroovyScriptFile(String fileName, Closure systemGroovyClosure = null)
@@ -205,9 +206,6 @@ freeStyleJob(String name) { // since 1.30
                          boolean latestOnlyBoolean = false)
         archiveArtifacts(Closure archiveArtifactsClosure) // since 1.20
         archiveJavadoc(Closure javadocClosure) // since 1.19
-        archiveJunit(String glob, boolean retainLongStdout,
-                     boolean allowClaimingOfFailedTests = false,
-                     boolean publishTestAttachments = false) // deprecated
         archiveJunit(String glob, Closure junitClosure = null) // since 1.26
         archiveXunit(Closure xunitClosure) // since 1.24
         associatedFiles(String files = null) // since 1.20
@@ -243,6 +241,7 @@ freeStyleJob(String name) { // since 1.30
         hipChat(Closure hipChatClosure = null) // since 1.33
         irc(Closure ircClosure)
         jacocoCodeCoverage(Closure jacocoClosure)
+        joinTrigger(Closure joinTriggerClosure) // since 1.35
         jshint(String pattern, Closure staticAnalysisClosure = null)
         mailer(String recipients, Boolean dontNotifyEveryUnstableBuild = false,
                Boolean sendToIndividuals = false)
@@ -347,7 +346,9 @@ mavenJob(String name) { // since 1.30
     runHeadless(boolean shouldRunHeadless)
     preBuildSteps(Closure stepsClosure)
     postBuildSteps(Closure stepsClosure)
+    postBuildSteps(String threshold, Closure stepsClosure) // since 1.35
     providedSettings(String mavenSettingsName) // since 1.25
+    disableDownstreamTrigger(boolean value = true) // since 1.35
     wrappers {
         mavenRelease(Closure mavenReleaseClosure = null) // since 1.25
     }
@@ -604,6 +605,7 @@ job {
         permission(String permission, String user)
         permissionAll(String user)
         permission(Permissions perm, String user) // deprecated since 1.31
+        blocksInheritance(boolean blocksInheritance = true) // since 1.35 
     }
 }
 ```
@@ -630,10 +632,12 @@ job('example-2') {
     }
 }
 
-// add all permissions for user joe
+// add all permissions for user joe, blocking inheritance of the global
+// authorization matrix
 job('example-3') {
     authorization {
         permissionAll('joe')
+        blocksInheritance()
     }
 }
 ```
@@ -870,25 +874,54 @@ mavenJob {
 }
 ```
 
-Specifiy this to run the build in headless mode if desktop access is not required. Headless mode is not enabled by default.
+Specify this to run the build in headless mode if desktop access is not required. Headless mode is not enabled by default.
+
+### Disable Downstream Triggering
+
+```groovy
+mavenJob {
+    disableDownstreamTrigger(boolean disableDownstreamTrigger = true)
+}
+```
+
+Disables automatic downstream build triggering. Downstream build triggering is enabled by default.
+
+```groovy
+mavenJob('example') {
+    disableDownstreamTrigger()
+}
+```
+
+(since 1.35)
 
 ### Maven Pre and Post Build Steps
 
 ```groovy
 mavenJob {
-    preBuildSteps(Closure mavenPreBuildClosure)
-    postBuildSteps(Closure mavenPostBuildClosure)
+    preBuildSteps(Closure stepsClosure)
+    postBuildSteps(Closure stepsClosure)
+    postBuildSteps(String thresholdName, Closure stepsClosure) // since 1.35
 }
 ```
 
-For Maven jobs, you can also run arbitrary build steps before and after the Maven execution. Note that this can only be used with Maven jobs.
+For Maven jobs, you can also run arbitrary build steps before and after the Maven execution. Note that this can only be
+used with Maven jobs. You can also also specify a threshold for the build result when to run the postBuildSteps.
+The thresholdName can be one of three values: `'SUCCESS'`, `'UNSTABLE'` or `'FAILURE'`. The default value is
+`'FAILURE'`, i.e. always run the post build steps.
 
 ```groovy
-mavenJob('example') {
+mavenJob('example-1') {
   preBuildSteps {
     shell("echo 'run before Maven'")
   }
   postBuildSteps {
+    shell("echo 'run after Maven'")
+  }
+}
+
+mavenJob('example-2') {
+  // run post build steps only when the build succeeds
+  postBuildSteps('SUCCESS') {
     shell("echo 'run after Maven'")
   }
 }
@@ -1054,6 +1087,8 @@ job {
             ignoreNotifyCommit(boolean value = true) // since 1.33
             browser { // since 1.26
                 stash(String url) // URL to the Stash repository, optional
+                gitblit(String url, String projectName) // since 1.35
+                gitLab(String url, String version)      // since 1.35
             }
             strategy { // since 1.30
                 inverse()
@@ -1472,7 +1507,6 @@ gerrit {
         draftPublished()  // since 1.26
         patchsetCreated() // since 1.26
         refUpdated()      // since 1.26
-        // free form listing of event names is deprecated since 1.26
     }
     project(String projectName, List<String> branches)    // can be called multiple times
     project(String projectName, String branches)          // can be called multiple times
@@ -1487,8 +1521,6 @@ gerrit {
 
 Polls Gerrit for changes. This DSL method works slightly differently by exposing most of its functionality in its own
 block. This is accommodating how the plugin can be pointed to multiple projects and trigger on many events.
-
-The usage "short names" in the event closure is deprecated since 1.26.
 
 Requires the [Gerrit Trigger Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Gerrit+Trigger).
 
@@ -1509,7 +1541,7 @@ gerrit {
 ### Github Pull Request Trigger
 
 ```groovy
-job('example') {
+job {
     triggers {
         pullRequest {
             admin(String admin)
@@ -1518,13 +1550,14 @@ job('example') {
             userWhitelist(Iterable<String> users)
             orgWhitelist(String organization)
             orgWhitelist(Iterable<String> organizations)
-            cron(String cron)                                 // defaults to 'H/5 * * * *'
+            cron(String cron)                           // defaults to 'H/5 * * * *'
             triggerPhrase(String triggerPhrase)
-            onlyTriggerPhrase(boolean value = true)            // defaults to false
+            onlyTriggerPhrase(boolean value = true)           // defaults to false
             useGitHubHooks(boolean useGithubHooks = true)     // defaults to false
             permitAll(boolean permitAll = true)               // defaults to false
             autoCloseFailedPullRequests(boolean value = true) // defaults to false
             commentFilePath(String commentFilePath)           // since 1.31
+            allowMembersOfWhitelistedOrgsAsAdmin(boolean value = true) // since 1.35
         }
     }
 }
@@ -1557,6 +1590,7 @@ job('example') {
             useGitHubHooks()
             permitAll()
             autoCloseFailedPullRequests()
+            allowMembersOfWhitelistedOrgsAsAdmin()
         }
     }
 }
@@ -1941,7 +1975,6 @@ job {
 ```groovy
 job {
     wrappers {
-        xvnc(boolean takeScreenshot) // deprecated
         xvnc { // since 1.26
             takeScreenshot(boolean taskScreenshot = true) // defaults to false
             useXauthority(boolean useXauthority = true)   // defaults to true
@@ -2907,6 +2940,32 @@ job('example') {
 
 (Since 1.25)
 
+### Set the Build Result
+
+```groovy
+job {
+    steps {
+        setBuildResult(String result)
+    }
+}
+```
+
+Set the build status. Possible values are `'SUCCESS'`, `'UNSTABLE'`, `'FAILURE'`, `'ABORTED'`, `'CYCLE'`.
+
+You can only worsen the current build status, not improve it.
+
+Requires the [Fail The Build Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Fail+The+Build+Plugin).
+
+```groovy
+job('example') {
+    steps {
+        setBuildResult('UNSTABLE')
+    }
+}
+```
+
+(since 1.35)
+
 ### Job DSL
 
 ```groovy
@@ -3485,89 +3544,104 @@ job('example-2') {
 }
 ```
 
-### [Conditional BuildStep Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin)
+### Conditional Build Steps
 
 ```groovy
-conditionalSteps {
-    condition {
-        // Only one condition is allowed.
-        alwaysRun() // Run no matter what
-        neverRun() // Never run
-        booleanCondition(String token) // Run if the token evaluates to true.
-        stringsMatch(String arg1, String arg2, boolean ignoreCase) // Run if the two strings match
-        cause(String buildCause, boolean exclusiveCondition) // Run if the build cause matches the given string
-        expression(String expression, String label) // Run if the regular expression matches the label
-        time(int earliestHour, int earliestMinute, int latestHour, int latestMinute,
-             boolean useBuildTime) // Run if the current (or build) time is between the given dates.
-        status(String worstResult, String bestResult) // Run if worstResult <= (current build status) <= bestResult
-        shell(String command) // Run if shell script succeeds (Since 1.23)
-        batch(String command) // Run if batch script succeeds (Since 1.23)
-        fileExists(String file, BaseDir baseDir) // Run if file exists relative to baseDir. BaseDir can be one of JENKINS_HOME, ARTIFACTS_DIR and WORKSPACE (Since 1.23)
-        not(Closure condition) // Run if the condition is not satisfied (Since 1.23)
-        and(Closure... conditions) // Run if all conditions are satisfied (Since 1.23)
-        or(Closure... conditions) // Run if any condition is satisfied (Since 1.23)
-    }
-    runner(String runner) // How to evaluate the results of a failure in the conditional step
-    (one or more build steps)
-}
-```
-
-See the [Run Condition Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Run+Condition+Plugin) for details on the run conditions - note that not all run conditions supported by the Run Condition Plugin are supported here yet.
-
-The worstResult and bestResult for status can be any of the following strings:
-"SUCCESS", "UNSTABLE", "FAILURE",  "NOT_BUILT", or "ABORTED".
-The runner can be any one of "Fail", "Unstable", "RunUnstable", "Run", "DontRun".
-
-Examples:
-```groovy
-steps {
-    conditionalSteps {
-        condition {
-            stringsMatch('${SOME_PARAMETER}', 'pants', false)
-        }
-        runner("Fail")
-        shell("echo 'just one step'")
-    }
-}
-```
-
-```groovy
-steps {
-    conditionalSteps {
-        condition {
-            time(9, 0, 13, 0, false)
-        }
-        runner("Unstable")
-        shell("echo 'a first step'")
-        ant('build') {
-            target 'test'
+job {
+    steps {
+        conditionalSteps {
+            condition {                      // only one condition is allowed
+                alwaysRun()                  // run no matter what
+                neverRun()                   // never run
+                booleanCondition(String token)
+                stringsMatch(String arg1, String arg2, boolean ignoreCase)
+                cause(String buildCause, boolean exclusiveCondition)
+                expression(String expression, String label)
+                time(int earliestHour, int earliestMinute, int latestHour,
+                     int latestMinute, boolean useBuildTime)
+                status(String worstResult, String bestResult)
+                shell(String command)                           // since 1.23
+                batch(String command)                           // since 1.23
+                fileExists(String file, BaseDir baseDir)        // since 1.23
+                not(Closure condition)                          // since 1.23
+                and(Closure... conditions)                      // since 1.23
+                or(Closure... conditions)                       // since 1.23
+            }
+            runner(String runner)
+            steps(Closure stepClosure) // one or more build steps, since 1.35
+            // using build steps directly is deprecated since 1.35
         }
     }
 }
 ```
 
+Wraps any number of other build steps, controlling their execution based on a defined condition. Requires the
+[Conditional BuildStep Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin). See the
+[Run Condition Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Run+Condition+Plugin) for details on the run
+conditions - note that not all run conditions supported by the Run Condition Plugin are supported here yet.
+
+The values for `worstResult` and `bestResult` can be any of the following strings: `'SUCCESS'`, `'UNSTABLE'`,
+`'FAILURE'`, `'NOT_BUILT'`, or `'ABORTED'`. The runner can be any one of `'Fail'`, `'Unstable'`, `'RunUnstable'`,
+`'Run'`, `'DontRun'`. Valid values for `baseDir` are `BaseDir.JENKINS_HOME`, `BaseDir.ARTIFACTS_DIR` and
+`BaseDir.WORKSPACE`.
+
 ```groovy
-steps {
-    conditionalSteps {
-        condition {
-            and {
-                status('ABORTED', 'FAILURE')
-            } {
-                not {
-                   fileExists('script.sh', BaseDir.WORKSPACE)
+job('example-1') {
+    steps {
+        conditionalSteps {
+            condition {
+                stringsMatch('${SOME_PARAMETER}', 'pants', false)
+            }
+            runner('Fail')
+            steps {
+                shell("echo 'just one step'")
+            }
+        }
+    }
+}
+
+job('example-2') {
+    steps {
+        conditionalSteps {
+            condition {
+                time(9, 0, 13, 0, false)
+            }
+            runner('Unstable')
+            steps {
+                shell("echo 'a first step'")
+                ant('build') {
+                    target('test')
                 }
             }
         }
-        runner("Unstable")
-        shell("echo 'a first step'")
-        ant('build') {
-            target 'test'
+    }
+}
+
+job('example-3') {
+    steps {
+        conditionalSteps {
+            condition {
+                and {
+                    status('ABORTED', 'FAILURE')
+                } {
+                    not {
+                       fileExists('script.sh', BaseDir.WORKSPACE)
+                    }
+                }
+            }
+            runner('Unstable')
+            steps {
+                shell("echo 'a first step'")
+                ant('build') {
+                    target('test')
+                }
+            }
         }
     }
 }
 ```
 
-(Since 1.20)
+(since 1.20)
 
 ### Repository Connector
 
@@ -3861,9 +3935,6 @@ publishers {
 ```groovy
 job {
     publishers {
-        archiveJunit(String glob, boolean retainLongStdout,
-                     boolean allowClaimingOfFailedTests = false,
-                     boolean publishTestAttachments = false) // deprecated
         archiveJunit(String glob) { // since 1.26
             retainLongStdout(boolean retain = true) // options, defaults to false
             testDataPublishers {
@@ -3954,10 +4025,6 @@ job {
                 keepAll(boolean keepAll = true)          // defaults to false
                 alwaysLinkToLastBuild(boolean value = true)     // since 1.35
             }
-            report(String reportDir, String reportName,
-                   String reportFiles = 'index.html',
-                   Boolean keepAll = false) // deprecated since 1.28
-            report(Map args) // deprecated since 1.28
         }
     }
 }
@@ -4149,6 +4216,51 @@ irc {
   notificationMessage('SummaryOnly')
 }
 ```
+
+### Join Trigger
+
+```groovy
+job {
+    publishers {
+        joinTrigger {
+            projects(String... projects)
+            publishers(Closure publisherClosure)
+            evenIfDownstreamUnstable(boolean evenIfDownstreamUnstable = true)
+        }
+    }
+}
+```
+
+Allows a job to be run after all the immediate downstream jobs have completed. Requires the
+[Join Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Join+Plugin).
+
+Currently only the `downstreamParameterized` publisher is supported by the Join Plugin.
+
+```groovy
+job('example-1') {
+    publishers {
+        joinTrigger {
+            projects('upload-to-staging')
+        }
+    }
+}
+
+job('example-2') {
+    publishers {
+        joinTrigger {
+            publishers {
+                downstreamParameterized {
+                    trigger('upload-to-staging') {
+                        currentBuild()
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+(since 1.35)
 
 ### Cobertura coverage report
 

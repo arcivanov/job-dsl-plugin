@@ -9,7 +9,8 @@ class FileJobManagementSpec extends Specification {
     @Rule
     TemporaryFolder temporaryFolder = new TemporaryFolder()
 
-    private final FileJobManagement jobManagement = new FileJobManagement(temporaryFolder.newFolder())
+    private final File tempFolder = temporaryFolder.newFolder()
+    private final FileJobManagement jobManagement = new FileJobManagement(tempFolder)
 
     def setup() {
         XMLUnit.ignoreWhitespace = true
@@ -78,7 +79,16 @@ class FileJobManagementSpec extends Specification {
 
         then:
         result
-        new File('foo.xml').text == 'bar'
+        new File(tempFolder, 'foo.xml').text == 'bar'
+    }
+
+    def 'createOrUpdateConfig creates config in folder'() {
+        when:
+        boolean result = jobManagement.createOrUpdateConfig('foo/bar', 'baz', false)
+
+        then:
+        result
+        new File(tempFolder, 'foo/bar.xml').text == 'baz'
     }
 
     def 'createOrUpdateView complains about missing name'(String name) {
@@ -108,7 +118,15 @@ class FileJobManagementSpec extends Specification {
         jobManagement.createOrUpdateView('foo', 'bar', false)
 
         then:
-        new File('foo.xml').text == 'bar'
+        new File(tempFolder, 'foo.xml').text == 'bar'
+    }
+
+    def 'createOrUpdateView creates config in folder'() {
+        when:
+        jobManagement.createOrUpdateView('foo/bar', 'baz', false)
+
+        then:
+        new File(tempFolder, 'foo/bar.xml').text == 'baz'
     }
 
     def 'createOrUpdateConfigFile is not supported'() {

@@ -16,9 +16,12 @@ If you want to get fancy you'll want to read up on [[configure block|The Configu
 Have a look at the [Jenkins Job DSL Gradle example](https://github.com/sheehan/job-dsl-gradle-example) to see how to organize a SCM repository for Job DSL scripts.
 
 ## Release Notes
-* 1.35 (unreleased)
+* 1.35 (July 01 2015)
  * Added support for the [Build Flow Test Aggregator Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Flow+Test+Aggregator+Plugin)
    ([JENKINS-28851](https://issues.jenkins-ci.org/browse/JENKINS-28851))
+ * Added support for the [Join Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Join+Plugin)
+   ([JENKINS-28985](https://issues.jenkins-ci.org/browse/JENKINS-28985))
+ * Added support for the [Fail The Build Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Fail+The+Build+Plugin)
  * Added closure method for logRotator
  * Allow to extend the trigger context
    ([JENKINS-28562](https://issues.jenkins-ci.org/browse/JENKINS-28562))
@@ -30,15 +33,38 @@ Have a look at the [Jenkins Job DSL Gradle example](https://github.com/sheehan/j
  * Fixed problem with implementing the extension point 
    ([JENKINS-28408](https://issues.jenkins-ci.org/browse/JENKINS-28408))
  * Provide better error message when trying to move a job into a non-existing folder 
-   ([JENKINS-28408](https://issues.jenkins-ci.org/browse/JENKINS-29100))
+   ([JENKINS-29100](https://issues.jenkins-ci.org/browse/JENKINS-29100))
+ * Fixed problem that caused a changing order of elements not to trigger a job update
+   ([JENKINS-29107](https://issues.jenkins-ci.org/browse/JENKINS-29107))
+ * Fixed support for multi-job phases in conditional build steps
+ * Introduced nested steps context for conditional build steps and deprecated direct use of build steps in conditional
+   build steps, see [[Migration]]
  * Enhanced support for the [HTML Publisher Plugin](https://wiki.jenkins-ci.org/display/JENKINS/HTML+Publisher+Plugin)
    ([JENKINS-28564](https://issues.jenkins-ci.org/browse/JENKINS-28564))
  * Enhanced support for the [Config File Provider Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Config+File+Provider+Plugin)
+ * Enhanced support for the [GitHub Pull Request Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin)
+ * Enhanced support for the [Git Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin)
+   ([JENKINS-28405](https://issues.jenkins-ci.org/browse/JENKINS-28405))
+ * Enhanced support for [Matrix Authorization Strategy Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Matrix+Authorization+Strategy+Plugin)
+   ([JENKINS-27320](https://issues.jenkins-ci.org/browse/JENKINS-27320))
+ * Removed unnecessary update of Jenkins project dependency graph
+ * Enhanced support for [Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin)
+   ([JENKINS-29070](https://issues.jenkins-ci.org/browse/JENKINS-29070),
+   [JENKINS-29110](https://issues.jenkins-ci.org/browse/JENKINS-29110))
  * Added support for the latest version of the [S3 Plugin](https://wiki.jenkins-ci.org/display/JENKINS/S3+Plugin)
    ([JENKINS-26561](https://issues.jenkins-ci.org/browse/JENKINS-26561))
+ * Added documentation for [[IDE Support]]
+ * Added documentation about [logging](Job-DSL-Commands#logging)
+ * Write output files for `FileJobManagment` to the same directory as the input files
+ * Fixed `FileJobManagement` to create missing folders
+   ([JENKINS-27124](https://issues.jenkins-ci.org/browse/JENKINS-27124))
+ * Support for the older versions of the [Matrix Authorization Strategy Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Matrix+Authorization+Strategy+Plugin) is deprecated, see [[Migration]]
  * Support for the older versions of the [S3 Plugin](https://wiki.jenkins-ci.org/display/JENKINS/S3+Plugin) is deprecated, see [[Migration]]
- * Removed anything that has been deprecated in 1.27, see [[Migration#migrating-to-127]]
+ * Support for the older versions of the [GitHub Pull Request Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin) is deprecated, see [[Migration]]
+ * Support for the older versions of the [Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin) is deprecated, see [[Migration]]
+ * Removed anything that has been deprecated in 1.27, see [Migration](Migration#migrating-to-127)
    ([JENKINS-27492](https://issues.jenkins-ci.org/browse/JENKINS-27492))
+ * Removed anything that has been deprecated in 1.28, see [Migration](Migration#migrating-to-128)
 * 1.34 (May 08 2015)
  * Enhanced support for the [Publish Over SSH Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Publish+Over+SSH+Plugin)
    ([JENKINS-26636](https://issues.jenkins-ci.org/browse/JENKINS-26636))
@@ -107,7 +133,7 @@ Have a look at the [Jenkins Job DSL Gradle example](https://github.com/sheehan/j
  * The enum argument of `localRepository` for the Maven job and context has changed, see [[Migration]]
  * Support for the older versions of the [Multijob Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Multijob+Plugin) is deprecated, see [[Migration]]
  * The views closure of the nested view type has been changed, see [[Migration]]
- * Removed anything that has been deprecated in 1.26, see [[Migration#migrating-to-126]]
+ * Removed anything that has been deprecated in 1.26, see [Migration](Migration#migrating-to-126)
 * 1.30 (March 08 2015)
  * Added support for [Custom Tools Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Custom+Tools+Plugin)
  * Added support for [Flaky Test Handler Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Flaky+Test+Handler+Plugin)
