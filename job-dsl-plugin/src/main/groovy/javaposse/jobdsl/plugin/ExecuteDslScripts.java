@@ -172,7 +172,7 @@ public class ExecuteDslScripts extends Builder {
     public boolean isSimulate() {
         return simulate;
     }
-    
+
     public RemovedJobAction getRemovedJobAction() {
         return removedJobAction;
     }
