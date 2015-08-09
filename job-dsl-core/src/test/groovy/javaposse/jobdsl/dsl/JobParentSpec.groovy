@@ -429,13 +429,13 @@ class JobParentSpec extends Specification {
         parent.readFileFromWorkspace(null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         parent.readFileFromWorkspace('')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'streamFileFromWorkspace'() {
@@ -452,13 +452,13 @@ class JobParentSpec extends Specification {
         parent.readFileFromWorkspace(null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         parent.readFileFromWorkspace('')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'readFileInWorkspace from other job'() {
@@ -474,25 +474,25 @@ class JobParentSpec extends Specification {
         parent.readFileFromWorkspace('my-job', null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         parent.readFileFromWorkspace('my-job', '')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         parent.readFileFromWorkspace(null, 'foo.txt')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         parent.readFileFromWorkspace('', 'foo.txt')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'freeStyleJob deprecated variant'() {
@@ -570,6 +570,7 @@ class JobParentSpec extends Specification {
         then:
         job.name == 'test'
         parent.referencedJobs.contains(job)
+        1 * jobManagement.requirePlugin('matrix-project')
     }
 
     def 'mavenJob deprecated variant'() {
@@ -597,7 +598,6 @@ class JobParentSpec extends Specification {
         job.name == 'test'
         parent.referencedJobs.contains(job)
         2 * jobManagement.logDeprecationWarning()
-        1 * jobManagement.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
     }
 
     def 'mavenJob'() {
@@ -623,7 +623,6 @@ class JobParentSpec extends Specification {
         job.name == 'test'
         parent.referencedJobs.contains(job)
         1 * jobManagement.requirePlugin('maven-plugin')
-        1 * jobManagement.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
     }
 
     def 'multiJob deprecated variant'() {
@@ -636,6 +635,7 @@ class JobParentSpec extends Specification {
         job.name == 'test'
         parent.referencedJobs.contains(job)
         2 * jobManagement.logDeprecationWarning()
+        1 * jobManagement.logPluginDeprecationWarning('jenkins-multijob-plugin', '1.16')
     }
 
     def 'multiJob'() {
@@ -647,6 +647,7 @@ class JobParentSpec extends Specification {
         job.name == 'test'
         parent.referencedJobs.contains(job)
         1 * jobManagement.requirePlugin('jenkins-multijob-plugin')
+        1 * jobManagement.logPluginDeprecationWarning('jenkins-multijob-plugin', '1.16')
     }
 
     def 'workflow deprecated variant'() {

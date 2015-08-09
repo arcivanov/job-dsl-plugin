@@ -1,18 +1,17 @@
 package javaposse.jobdsl.dsl.helpers.step
 
-import com.google.common.base.Preconditions
 import hudson.util.VersionNumber
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
 import javaposse.jobdsl.dsl.helpers.AbstractExtensibleContext
 import javaposse.jobdsl.dsl.helpers.common.DownstreamContext
 import javaposse.jobdsl.dsl.helpers.common.PublishOverSshContext
 
-import static com.google.common.base.Strings.isNullOrEmpty
 import static javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation.LOCAL_TO_WORKSPACE
 
 class StepContext extends AbstractExtensibleContext {
@@ -111,8 +110,10 @@ class StepContext extends AbstractExtensibleContext {
     @RequiresPlugin(id = 'sbt')
     void sbt(String sbtNameArg, String actionsArg = null, String sbtFlagsArg = null, String jvmFlagsArg = null,
              String subdirPathArg = null, Closure configure = null) {
+        Preconditions.checkNotNull(sbtNameArg, 'Please provide the name of the SBT to use')
+
         Node sbtNode = new NodeBuilder().'org.jvnet.hudson.plugins.SbtPluginBuilder' {
-            name Preconditions.checkNotNull(sbtNameArg, 'Please provide the name of the SBT to use' as Object)
+            name sbtNameArg
             jvmFlags jvmFlagsArg ?: ''
             sbtFlags sbtFlagsArg ?: ''
             actions actionsArg ?: ''
@@ -136,7 +137,7 @@ class StepContext extends AbstractExtensibleContext {
 
         stepNodes << new NodeBuilder().'javaposse.jobdsl.plugin.ExecuteDslScripts' {
             targets(context.externalScripts.join('\n'))
-            usingScriptText(!isNullOrEmpty(context.scriptText))
+            usingScriptText(context.scriptText as boolean)
             scriptText(context.scriptText ?: '')
             ignoreExisting(context.ignoreExisting)
             removedJobAction(context.removedJobAction)
@@ -294,9 +295,7 @@ class StepContext extends AbstractExtensibleContext {
      */
     @RequiresPlugin(id = 'maven-plugin')
     void maven(@DslContext(MavenContext) Closure closure) {
-        if (jobManagement.getPluginVersion('maven-plugin')?.isOlderThan(new VersionNumber('2.3'))) {
-            jobManagement.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
-        }
+        jobManagement.logPluginDeprecationWarning('maven-plugin', '2.3')
 
         MavenContext mavenContext = new MavenContext(jobManagement)
         ContextHelper.executeInContext(closure, mavenContext)
@@ -403,12 +402,10 @@ class StepContext extends AbstractExtensibleContext {
      */
     @RequiresPlugin(id = 'copyartifact', minimumVersion = '1.26')
     void copyArtifacts(String jobName, @DslContext(CopyArtifactContext) Closure copyArtifactClosure = null) {
+        jobManagement.logPluginDeprecationWarning('copyartifact', '1.31')
+
         CopyArtifactContext copyArtifactContext = new CopyArtifactContext(jobManagement)
         ContextHelper.executeInContext(copyArtifactClosure, copyArtifactContext)
-
-        if (jobManagement.getPluginVersion('copyartifact')?.isOlderThan(new VersionNumber('1.31'))) {
-            jobManagement.logDeprecationWarning('support for Copy Artifact plugin versions 1.30 and earlier')
-        }
 
         Node copyArtifactNode = new NodeBuilder().'hudson.plugins.copyartifact.CopyArtifact' {
             project(jobName)
@@ -528,8 +525,8 @@ class StepContext extends AbstractExtensibleContext {
     @RequiresPlugin(id = 'Parameterized-Remote-Trigger')
     void remoteTrigger(String remoteJenkins, String jobName,
                        @DslContext(ParameterizedRemoteTriggerContext) Closure closure = null) {
-        Preconditions.checkArgument(!isNullOrEmpty(remoteJenkins), 'remoteJenkins must be specified')
-        Preconditions.checkArgument(!isNullOrEmpty(jobName), 'jobName must be specified')
+        Preconditions.checkNotNullOrEmpty(remoteJenkins, 'remoteJenkins must be specified')
+        Preconditions.checkNotNullOrEmpty(jobName, 'jobName must be specified')
 
         ParameterizedRemoteTriggerContext context = new ParameterizedRemoteTriggerContext()
         ContextHelper.executeInContext(closure, context)
@@ -659,10 +656,9 @@ class StepContext extends AbstractExtensibleContext {
 
     @RequiresPlugin(id = 'vsphere-cloud')
     private vSphereBuildStep(String server, String builder, Closure configuration) {
-        int hash = Preconditions.checkNotNull(
-                jobManagement.getVSphereCloudHash(server),
-                "vSphere server ${server} does not exist"
-        )
+        Integer hash = jobManagement.getVSphereCloudHash(server)
+        Preconditions.checkNotNull(hash, "vSphere server ${server} does not exist")
+
         stepNodes << new NodeBuilder().'org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer' {
             buildStep(class: "org.jenkinsci.plugins.vsphere.builders.${builder}", configuration)
             serverName server
@@ -707,11 +703,34 @@ class StepContext extends AbstractExtensibleContext {
     }
 
     /**
+     * @since 1.37
+     */
+    @RequiresPlugin(id = 'clang-scanbuild-plugin', minimumVersion = '1.6')
+    void clangScanBuild(@DslContext(ClangScanBuildContext) Closure closure) {
+        ClangScanBuildContext context = new ClangScanBuildContext()
+        ContextHelper.executeInContext(closure, context)
+
+        Preconditions.checkNotNullOrEmpty(context.workspace, 'workspace must be specified')
+        Preconditions.checkNotNullOrEmpty(context.scheme, 'scheme must be specified')
+        Preconditions.checkNotNullOrEmpty(context.clangInstallationName, 'clangInstallationName must be specified')
+
+        stepNodes << new NodeBuilder().'jenkins.plugins.clangscanbuild.ClangScanBuildBuilder' {
+            targetSdk(context.targetSdk ?: '')
+            config(context.configuration ?: '')
+            clangInstallationName(context.clangInstallationName)
+            workspace(context.workspace)
+            scheme(context.scheme)
+            scanbuildargs(context.scanBuildArgs ?: '')
+            xcodebuildargs(context.xcodeBuildArgs ?: '')
+        }
+    }
+
+    /**
      * @since 1.31
      */
     @RequiresPlugin(id = 'debian-package-builder', minimumVersion = '1.6.6')
     void debianPackage(String path, @DslContext(DebianContext) Closure closure = null) {
-        Preconditions.checkArgument(!isNullOrEmpty(path), 'path must be specified')
+        Preconditions.checkNotNullOrEmpty(path, 'path must be specified')
 
         DebianContext context = new DebianContext()
         ContextHelper.executeInContext(closure, context)

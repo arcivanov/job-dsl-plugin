@@ -1,11 +1,10 @@
 package javaposse.jobdsl.dsl
 
-import com.google.common.base.Preconditions
 import hudson.util.VersionNumber
 import javaposse.jobdsl.dsl.helpers.BuildParametersContext
 import javaposse.jobdsl.dsl.helpers.JobAuthorizationContext
-import javaposse.jobdsl.dsl.helpers.properties.PropertiesContext
 import javaposse.jobdsl.dsl.helpers.ScmContext
+import javaposse.jobdsl.dsl.helpers.properties.PropertiesContext
 import javaposse.jobdsl.dsl.helpers.publisher.PublisherContext
 import javaposse.jobdsl.dsl.helpers.step.StepContext
 import javaposse.jobdsl.dsl.helpers.toplevel.EnvironmentVariableContext
@@ -14,6 +13,10 @@ import javaposse.jobdsl.dsl.helpers.toplevel.NotificationContext
 import javaposse.jobdsl.dsl.helpers.toplevel.ThrottleConcurrentBuildsContext
 import javaposse.jobdsl.dsl.helpers.triggers.TriggerContext
 import javaposse.jobdsl.dsl.helpers.wrapper.WrapperContext
+
+import static javaposse.jobdsl.dsl.Preconditions.checkArgument
+import static javaposse.jobdsl.dsl.Preconditions.checkNotNull
+import static javaposse.jobdsl.dsl.Preconditions.checkState
 
 /**
  * DSL element representing a Jenkins job.
@@ -34,7 +37,7 @@ abstract class Job extends Item {
      * @throws JobTemplateMissingException
      */
     void using(String templateName) throws JobTemplateMissingException {
-        Preconditions.checkState(this.templateName == null, 'Can only use "using" once')
+        checkArgument(this.templateName == null, 'Can only use "using" once')
         this.templateName = templateName
     }
 
@@ -150,6 +153,17 @@ abstract class Job extends Item {
         }
     }
 
+    /**
+     * @since 1.36
+     */
+    @RequiresPlugin(id = 'heavy-job', minimumVersion = '1.1')
+    void weight(int weight) {
+        withXmlActions << WithXmlAction.create { Node project ->
+            Node node = methodMissing('weight', weight)
+            project / 'properties' / 'hudson.plugins.heavy__job.HeavyJobProperty' / node
+        }
+    }
+
     void disabled(boolean shouldDisable = true) {
         withXmlActions << WithXmlAction.create { Node project ->
             Node node = methodMissing('disabled', shouldDisable)
@@ -188,7 +202,16 @@ abstract class Job extends Item {
      * Block build if certain jobs are running.
      */
     void blockOn(Iterable<String> projectNames) {
-        blockOn(projectNames.join('\n'))
+        blockOn(projectNames, null)
+    }
+
+    /**
+     * Block build if certain jobs are running.
+
+     * @since 1.36
+     */
+    void blockOn(Iterable<String> projectNames, @DslContext(BuildBlockerContext) Closure closure) {
+        blockOn(projectNames.collect().join('\n'), closure)
     }
 
     /**
@@ -196,12 +219,30 @@ abstract class Job extends Item {
      *
      * @param projectName Can be regular expressions. Newline delimited.
      */
-    @RequiresPlugin(id = 'build-blocker-plugin')
     void blockOn(String projectName) {
+        blockOn(projectName, null)
+    }
+
+    /**
+     * Block build if certain jobs are running.
+     *
+     * @since 1.36
+     */
+    @RequiresPlugin(id = 'build-blocker-plugin')
+    void blockOn(String projectName, @DslContext(BuildBlockerContext) Closure closure) {
+        jobManagement.logPluginDeprecationWarning('build-blocker-plugin', '1.7.1')
+
+        BuildBlockerContext context = new BuildBlockerContext(jobManagement)
+        ContextHelper.executeInContext(closure, context)
+
         withXmlActions << WithXmlAction.create { Node project ->
             project / 'properties' / 'hudson.plugins.buildblocker.BuildBlockerProperty' {
-                useBuildBlocker 'true'
-                blockingJobs projectName
+                useBuildBlocker(true)
+                blockingJobs(projectName)
+                if (!jobManagement.getPluginVersion('build-blocker-plugin')?.isOlderThan(new VersionNumber('1.7.1'))) {
+                    blockLevel(context.blockLevel)
+                    scanQueueFor(context.scanQueueFor)
+                }
             }
         }
     }
@@ -265,7 +306,7 @@ abstract class Job extends Item {
      * @since 1.16
      */
     void displayName(String displayName) {
-        Preconditions.checkNotNull(displayName, 'Display name must not be null.')
+        checkNotNull(displayName, 'Display name must not be null.')
         withXmlActions << WithXmlAction.create { Node project ->
             Node node = methodMissing('displayName', displayName)
             project / node
@@ -279,7 +320,7 @@ abstract class Job extends Item {
      * @since 1.16
      */
     void customWorkspace(String workspacePath) {
-        Preconditions.checkNotNull(workspacePath, 'Workspace path must not be null')
+        checkNotNull(workspacePath, 'Workspace path must not be null')
         withXmlActions << WithXmlAction.create { Node project ->
             Node node = methodMissing('customWorkspace', workspacePath)
             project / node
@@ -327,6 +368,16 @@ abstract class Job extends Item {
         withXmlActions << WithXmlAction.create { Node project ->
             Node node = methodMissing('concurrentBuild', allowConcurrentBuild)
             project / node
+        }
+    }
+
+    /**
+     * @since 1.36
+     */
+    @RequiresPlugin(id = 'compress-buildlog', minimumVersion = '1.0')
+    void compressBuildLog() {
+        withXmlActions << WithXmlAction.create { Node project ->
+            project / 'properties' / 'org.jenkinsci.plugins.compressbuildlog.BuildLogCompressor'
         }
     }
 
@@ -382,11 +433,7 @@ abstract class Job extends Item {
 
     @RequiresPlugin(id = 'matrix-auth')
     void authorization(@DslContext(JobAuthorizationContext) Closure closure) {
-        if (jobManagement.getPluginVersion('matrix-auth')?.isOlderThan(new VersionNumber('1.2'))) {
-            jobManagement.logDeprecationWarning(
-                    'support for Matrix Authorization Strategy plugin versions older than 1.2'
-            )
-        }
+        jobManagement.logPluginDeprecationWarning('matrix-auth', '1.2')
 
         JobAuthorizationContext context = new JobAuthorizationContext(jobManagement)
         ContextHelper.executeInContext(closure, context)
@@ -422,7 +469,7 @@ abstract class Job extends Item {
         ContextHelper.executeInContext(closure, context)
 
         if (!context.scmNodes.empty) {
-            Preconditions.checkState(context.scmNodes.size() == 1, 'Outside "multiscm", only one SCM can be specified')
+            checkState(context.scmNodes.size() == 1, 'Outside "multiscm", only one SCM can be specified')
 
             withXmlActions << WithXmlAction.create { Node project ->
                 Node scm = project / scm
@@ -537,10 +584,7 @@ abstract class Job extends Item {
         String configXml
         try {
             configXml = jobManagement.getConfig(templateName)
-            if (configXml == null) {
-                throw new JobConfigurationNotFoundException()
-            }
-        } catch (JobConfigurationNotFoundException jcnfex) {
+        } catch (JobConfigurationNotFoundException ignore) {
             throw new JobTemplateMissingException(templateName)
         }
 

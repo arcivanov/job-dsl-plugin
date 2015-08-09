@@ -1,8 +1,10 @@
 package javaposse.jobdsl.dsl.helpers.publisher
 
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.jobs.FreeStyleJob
 import spock.lang.Specification
 
 import static javaposse.jobdsl.dsl.helpers.publisher.ArchiveXUnitContext.ThresholdMode
@@ -10,7 +12,7 @@ import static javaposse.jobdsl.dsl.helpers.publisher.PublisherContext.Behavior.M
 
 class PublisherContextSpec extends Specification {
     JobManagement jobManagement = Mock(JobManagement)
-    Item item = Mock(Item)
+    Item item = new FreeStyleJob(jobManagement)
     PublisherContext context = new PublisherContext(jobManagement, item)
 
     def 'empty call extended email method'() {
@@ -445,6 +447,7 @@ class PublisherContextSpec extends Specification {
         'embUnit'    | 'EmbUnitType'
         'fpcUnit'    | 'FPCUnitJunitHudsonTestType'
         'googleTest' | 'GoogleTestType'
+        'gtester'    | 'GTesterJunitHudsonTestType'
         'jUnit'      | 'JUnitType'
         'msTest'     | 'MSTestJunitHudsonTestType'
         'mbUnit'     | 'MbUnitType'
@@ -870,13 +873,13 @@ class PublisherContextSpec extends Specification {
         context.publishJabber('me@gmail.com', 'NOPE')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.publishJabber('me@gmail.com', 'ALL', 'Nope')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call Clone Workspace publish with minimal args'() {
@@ -914,13 +917,13 @@ class PublisherContextSpec extends Specification {
         context.publishCloneWorkspace('*/**', '*/.svn', 'Quite plainly wrong', 'ZIP', true)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.publishCloneWorkspace('*/**', '*/.svn', 'Not Failed', 'ZAP', true)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call Clone Workspace with Closure'() {
@@ -948,7 +951,7 @@ class PublisherContextSpec extends Specification {
         context.publishScp('javadoc', null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call scp publish with closure'() {
@@ -1060,7 +1063,7 @@ class PublisherContextSpec extends Specification {
         context.downstream('THE-JOB', 'BAD')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call downstream ext with all args'() {
@@ -1136,6 +1139,7 @@ class PublisherContextSpec extends Specification {
         second.configs[0].'hudson.plugins.parameterizedtrigger.CurrentBuildParameters'[0] instanceof Node
 
         1 * jobManagement.requirePlugin('parameterized-trigger')
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.downstreamParameterized {
@@ -1157,7 +1161,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call violations plugin with no args has correct defaults'() {
@@ -1300,7 +1304,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'notifyScmFixers is set'() {
@@ -1469,7 +1473,7 @@ class PublisherContextSpec extends Specification {
             target('invalid', 1, 2, 3)
         }
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'checking for invalid cobertura target treshold: negative'() {
@@ -1478,7 +1482,7 @@ class PublisherContextSpec extends Specification {
                 target('invalid', h, u, f)
             }
         then:
-            thrown(IllegalArgumentException)
+            thrown(DslScriptException)
         where:
             h  |  u |  f
             -1 |  1 |  1
@@ -1492,7 +1496,7 @@ class PublisherContextSpec extends Specification {
                 target('invalid', h, u, f)
             }
         then:
-            thrown(IllegalArgumentException)
+            thrown(DslScriptException)
         where:
             h  |  u  |  f
            101 |  1  |  1
@@ -1506,7 +1510,7 @@ class PublisherContextSpec extends Specification {
             sourceEncoding(null)
         }
         then:
-        thrown(NullPointerException)
+        thrown(DslScriptException)
     }
 
     def 'UTF-8 source encoding for cobertura should be the default instead of ASCII'() {
@@ -1788,28 +1792,90 @@ class PublisherContextSpec extends Specification {
         aggregateNode.includeFailedBuilds[0].value() == true
     }
 
-    def 'call groovyPostBuild'() {
+    def 'call groovyPostBuild with older plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('groovy-postbuild') >> new VersionNumber('1.10')
+
         when:
         context.groovyPostBuild('foo')
 
         then:
-        context.publisherNodes.size() == 1
-        context.publisherNodes[0].name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
-        context.publisherNodes[0].groovyScript[0].value() == 'foo'
-        context.publisherNodes[0].behavior[0].value() == 0
+        with(context.publisherNodes[0]) {
+            name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
+            children().size() == 2
+            groovyScript[0].value() == 'foo'
+            behavior[0].value() == 0
+        }
         1 * jobManagement.requirePlugin('groovy-postbuild')
+        1 * jobManagement.logPluginDeprecationWarning('groovy-postbuild', '2.2')
     }
 
-    def 'call groovyPostBuild with overriden failure behavior'() {
+    def 'call groovyPostBuild with overriden failure behavior and older plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('groovy-postbuild') >> new VersionNumber('1.10')
+
         when:
         context.groovyPostBuild('foo', MarkUnstable)
 
         then:
-        context.publisherNodes.size() == 1
-        context.publisherNodes[0].name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
-        context.publisherNodes[0].groovyScript[0].value() == 'foo'
-        context.publisherNodes[0].behavior[0].value() == 1
+        with(context.publisherNodes[0]) {
+            name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
+            children().size() == 2
+            groovyScript[0].value() == 'foo'
+            behavior[0].value() == 1
+        }
         1 * jobManagement.requirePlugin('groovy-postbuild')
+        1 * jobManagement.logPluginDeprecationWarning('groovy-postbuild', '2.2')
+    }
+
+    def 'call groovyPostBuild with no options and newer plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('groovy-postbuild') >> new VersionNumber('2.2')
+
+        when:
+        context.groovyPostBuild {
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
+            children().size() == 2
+            with(script[0]) {
+                children().size() == 2
+                script[0].value() == ''
+                sandbox[0].value() == false
+            }
+            behavior[0].value() == 0
+        }
+        1 * jobManagement.requirePlugin('groovy-postbuild')
+        1 * jobManagement.logPluginDeprecationWarning('groovy-postbuild', '2.2')
+    }
+
+    def 'call groovyPostBuild with all options and newer plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('groovy-postbuild') >> new VersionNumber('2.2')
+
+        when:
+        context.groovyPostBuild {
+            script('foo')
+            behavior(PublisherContext.Behavior.MarkFailed)
+            sandbox()
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'org.jvnet.hudson.plugins.groovypostbuild.GroovyPostbuildRecorder'
+            children().size() == 2
+            with(script[0]) {
+                children().size() == 2
+                script[0].value() == 'foo'
+                sandbox[0].value() == true
+            }
+            behavior[0].value() == 2
+        }
+        1 * jobManagement.requirePlugin('groovy-postbuild')
+        1 * jobManagement.requireMinimumPluginVersion('groovy-postbuild', '2.2')
+        1 * jobManagement.logPluginDeprecationWarning('groovy-postbuild', '2.2')
     }
 
     def 'call javadoc archiver with no args'() {
@@ -1937,7 +2003,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.emma('coverage-results/coverage.xml') {
@@ -1945,7 +2011,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.emma('coverage-results/coverage.xml') {
@@ -1953,7 +2019,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.emma('coverage-results/coverage.xml') {
@@ -1961,7 +2027,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.emma('coverage-results/coverage.xml') {
@@ -1969,7 +2035,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.emma('coverage-results/coverage.xml') {
@@ -1977,7 +2043,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'publish Robot framework report using default values'() {
@@ -2022,7 +2088,7 @@ class PublisherContextSpec extends Specification {
             otherFiles[0].value().empty
         }
         1 * jobManagement.requirePlugin('robot')
-        1 * jobManagement.logDeprecationWarning(_)
+        1 * jobManagement.logPluginDeprecationWarning('robot', '1.4.3')
     }
 
     def 'publish Robot framework report using default values and very old plugin version'() {
@@ -2045,7 +2111,7 @@ class PublisherContextSpec extends Specification {
             outputFileName[0].value() == 'output.xml'
         }
         1 * jobManagement.requirePlugin('robot')
-        1 * jobManagement.logDeprecationWarning(_)
+        1 * jobManagement.logPluginDeprecationWarning('robot', '1.4.3')
     }
 
     def 'publish Robot framework report using all options'() {
@@ -2186,6 +2252,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].pushOnlyIfSuccess[0].value() == false
         context.publisherNodes[0].forcePush[0].value() == false
         1 * jobManagement.requirePlugin('git')
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git with minimal options pre 2.2.6'() {
@@ -2204,6 +2271,7 @@ class PublisherContextSpec extends Specification {
         context.publisherNodes[0].pushMerge[0].value() == false
         context.publisherNodes[0].pushOnlyIfSuccess[0].value() == false
         1 * jobManagement.requirePlugin('git')
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git with all options'() {
@@ -2245,6 +2313,7 @@ class PublisherContextSpec extends Specification {
             }
         }
         1 * jobManagement.requirePlugin('git')
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git with minimal tag options'() {
@@ -2272,6 +2341,7 @@ class PublisherContextSpec extends Specification {
             }
         }
         1 * jobManagement.requirePlugin('git')
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git without tag targetRepoName'() {
@@ -2281,7 +2351,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.git {
@@ -2289,7 +2359,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call git without tag name'() {
@@ -2299,7 +2369,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.git {
@@ -2307,7 +2377,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call git without branch targetRepoName'() {
@@ -2317,7 +2387,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.git {
@@ -2325,7 +2395,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call git without branch name'() {
@@ -2335,7 +2405,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.git {
@@ -2343,7 +2413,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'flowdock with default notification settings'() {
@@ -2596,7 +2666,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'flowdock with multiple tokens'() {
@@ -2641,7 +2711,7 @@ class PublisherContextSpec extends Specification {
         context.flowdock(null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'stashNotifier with default configuration'() {
@@ -2863,8 +2933,8 @@ class PublisherContextSpec extends Specification {
         context.rundeck(id)
 
         then:
-        IllegalArgumentException exception = thrown()
-        exception.message == 'jobIdentifier cannot be null or empty'
+        Exception exception = thrown(DslScriptException)
+        exception.message =~ /\(.+, line \d+\) jobIdentifier cannot be null or empty/
 
         where:
         id   | _
@@ -2892,7 +2962,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         profile << [null, '']
@@ -2905,7 +2975,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         source | bucket | region
@@ -2928,7 +2998,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         storageClass << [null, '', 'FOO']
@@ -3052,7 +3122,7 @@ class PublisherContextSpec extends Specification {
             userMetadata[0].value().empty
         }
         1 * jobManagement.requirePlugin('s3')
-        1 * jobManagement.logDeprecationWarning(_)
+        1 * jobManagement.logPluginDeprecationWarning('s3', '0.7')
     }
 
     def 'call flexible publish'() {
@@ -3229,7 +3299,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call post build scripts with minimal options'() {
@@ -4002,7 +4072,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         type0            | data0 | type1            | data1
@@ -4025,7 +4095,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         group << [null, '']
@@ -4040,7 +4110,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         dataStore << [null, '']
@@ -4055,7 +4125,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         fileName << [null, '']
@@ -4071,7 +4141,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'retryBuild with no options'() {
@@ -4254,7 +4324,7 @@ class PublisherContextSpec extends Specification {
         context.publishOverSsh(null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call publishOverSsh without transferSet'() {
@@ -4265,7 +4335,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call publishOverSsh without sourceFiles and execCommand'() {
@@ -4278,7 +4348,7 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call publishOverSsh with minimal configuration and check the default values'() {
@@ -4527,6 +4597,122 @@ class PublisherContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
+    }
+
+    def 'slackNotifications with no options'() {
+        when:
+        context.slackNotifications {}
+
+        then:
+        context.publisherNodes[0].name() == 'jenkins.plugins.slack.SlackNotifier'
+        with(item.node.'properties'.'jenkins.plugins.slack.SlackNotifier_-SlackJobProperty') {
+            teamDomain.text() == ''
+            token.text() == ''
+            room.text() == ''
+            startNotification.text() == 'false'
+            notifySuccess.text() == 'false'
+            notifyAborted.text() == 'false'
+            notifyNotBuilt.text() == 'false'
+            notifyUnstable.text() == 'false'
+            notifyFailure.text() == 'false'
+            notifyBackToNormal.text() == 'false'
+            notifyRepeatedFailure.text() == 'false'
+            includeTestSummary.text() == 'false'
+            showCommitList.text() == 'false'
+            includeCustomMessage.text() == 'false'
+            customMessage.text() == ''
+        }
+        1 * jobManagement.requireMinimumPluginVersion('slack', '1.8')
+    }
+
+    def 'slackNotifications with all options'() {
+        when:
+        context.slackNotifications {
+            teamDomain('testdomain')
+            integrationToken('token1')
+            projectChannel('channel1')
+            notifyBuildStart()
+            notifyAborted()
+            notifyFailure()
+            notifyNotBuilt()
+            notifySuccess()
+            notifyUnstable()
+            notifyBackToNormal()
+            notifyRepeatedFailure()
+            includeTestSummary()
+            showCommitList()
+            customMessage('testing customMessage')
+        }
+
+        then:
+        context.publisherNodes[0].name() == 'jenkins.plugins.slack.SlackNotifier'
+        with(item.node.'properties'.'jenkins.plugins.slack.SlackNotifier_-SlackJobProperty') {
+            teamDomain.text() == 'testdomain'
+            token.text() == 'token1'
+            room.text() == 'channel1'
+            startNotification.text() == 'true'
+            notifySuccess.text() == 'true'
+            notifyAborted.text() == 'true'
+            notifyNotBuilt.text() == 'true'
+            notifyUnstable.text() == 'true'
+            notifyFailure.text() == 'true'
+            notifyBackToNormal.text() == 'true'
+            notifyRepeatedFailure.text() == 'true'
+            includeTestSummary.text() == 'true'
+            showCommitList.text() == 'true'
+            includeCustomMessage.text() == 'true'
+            customMessage.text() == 'testing customMessage'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('slack', '1.8')
+    }
+
+    def 'debianPackage with no options'() {
+        when:
+        context.debianPackage(repoId)
+
+        then:
+        thrown(DslScriptException)
+
+        where:
+        repoId << [null, '']
+    }
+
+    def 'debianPackage with repoId only'() {
+        when:
+        context.debianPackage('debian-squeeze') {
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'ru.yandex.jenkins.plugins.debuilder.DebianPackagePublisher'
+            children().size() == 3
+            repoId[0].value() == 'debian-squeeze'
+            commitMessage[0].value() == ''
+            commitChanges[0].value() == false
+        }
+        1 * jobManagement.requireMinimumPluginVersion('debian-package-builder', '1.6.7')
+    }
+
+    def 'debianPackage with empty commitMessage'() {
+        when:
+        context.debianPackage('debian-wheezy') {
+            commitMessage(message)
+        }
+
+        then:
+        with(context.publisherNodes[0]) {
+            name() == 'ru.yandex.jenkins.plugins.debuilder.DebianPackagePublisher'
+            children().size() == 3
+            repoId[0].value() == 'debian-wheezy'
+            commitMessage[0].value() == message
+            commitChanges[0].value() == commit
+        }
+        1 * jobManagement.requireMinimumPluginVersion('debian-package-builder', '1.6.7')
+
+        where:
+        message                       | commit
+        ''                            | false
+        'automatic commit by Jenkins' | true
     }
 }

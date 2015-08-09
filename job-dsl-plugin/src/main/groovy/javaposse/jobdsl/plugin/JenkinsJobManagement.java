@@ -31,6 +31,7 @@ import javaposse.jobdsl.dsl.AbstractJobManagement;
 import javaposse.jobdsl.dsl.ConfigFile;
 import javaposse.jobdsl.dsl.ConfigFileType;
 import javaposse.jobdsl.dsl.DslException;
+import javaposse.jobdsl.dsl.DslScriptException;
 import javaposse.jobdsl.dsl.JobConfigurationNotFoundException;
 import javaposse.jobdsl.dsl.NameNotProvidedException;
 import javaposse.jobdsl.dsl.UserContent;
@@ -246,16 +247,17 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
     }
 
     @Override
+    @Deprecated
     public String getCredentialsId(String credentialsDescription) {
         Jenkins jenkins = Jenkins.getInstance();
         Plugin credentialsPlugin = jenkins.getPlugin("credentials");
         if (credentialsPlugin != null && !credentialsPlugin.getWrapper().getVersionNumber().isOlderThan(new VersionNumber("1.6"))) {
             for (CredentialsProvider credentialsProvider : jenkins.getExtensionList(CredentialsProvider.class)) {
                 for (StandardCredentials credentials : credentialsProvider.getCredentials(StandardCredentials.class, jenkins, SYSTEM)) {
-                    if (credentials.getDescription().equals(credentialsDescription)) {
-                        logDeprecationWarning("finding credentials by description");
+                    if (credentials.getId().equals(credentialsDescription)) {
                         return credentials.getId();
-                    } else if (credentials.getId().equals(credentialsDescription)) {
+                    } else if (credentials.getDescription().equals(credentialsDescription)) {
+                        logDeprecationWarning("finding credentials by description");
                         return credentials.getId();
                     }
                 }
@@ -295,16 +297,26 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
             if (workspace != null) {
                 try {
                     return locateValidFileInWorkspace(workspace, relLocation).readToString();
-                } catch (IllegalStateException e) {
-                    logWarning(Messages.ReadFileFromWorkspace_JobFileNotFound(), relLocation, jobName);
+                } catch (DslScriptException e) {
+                    logWarning(format(Messages.ReadFileFromWorkspace_JobFileNotFound(), relLocation, jobName));
                 }
             } else {
-                logWarning(Messages.ReadFileFromWorkspace_WorkspaceNotFound(), relLocation, jobName);
+                logWarning(format(Messages.ReadFileFromWorkspace_WorkspaceNotFound(), relLocation, jobName));
             }
         } else {
-            logWarning(Messages.ReadFileFromWorkspace_JobNotFound(), relLocation, jobName);
+            logWarning(format(Messages.ReadFileFromWorkspace_JobNotFound(), relLocation, jobName));
         }
         return null;
+    }
+
+    @Override
+    public void logPluginDeprecationWarning(String pluginShortName, String minimumVersion) {
+        Plugin plugin = Jenkins.getInstance().getPlugin(pluginShortName);
+        if (plugin != null && plugin.getWrapper().getVersionNumber().isOlderThan(new VersionNumber(minimumVersion))) {
+            logDeprecationWarning(
+                    "support for " + plugin.getWrapper().getDisplayName() + " versions older than " + minimumVersion
+            );
+        }
     }
 
     @Override
@@ -425,7 +437,7 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
     }
 
     private void markBuildAsUnstable(String message) {
-        getOutputStream().println("Warning: " + message + " (" + getSourceDetails(getStackTrace()) + ")");
+        logWarning(message);
         build.setResult(UNSTABLE);
     }
 
@@ -433,7 +445,7 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
         FilePath filePath = workspace.child(relLocation);
         try {
             if (!filePath.exists()) {
-                throw new IllegalStateException(format("File %s does not exist in workspace", relLocation));
+                throw new DslScriptException(format("File %s does not exist in workspace", relLocation));
             }
         } catch (InterruptedException ie) {
             throw new IOException(ie);
@@ -475,6 +487,8 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
             LOGGER.warning(e.getMessage());
         }
 
+        checkItemType(item, dslItem);
+
         LOGGER.log(Level.FINE, format("Updating item %s as %s", item.getName(), config));
         Source streamSource = new StreamSource(new StringReader(config));
         try {
@@ -486,6 +500,27 @@ public final class JenkinsJobManagement extends AbstractJobManagement {
             created = false;
         }
         return created;
+    }
+
+    private void checkItemType(AbstractItem item, javaposse.jobdsl.dsl.Item dslItem) {
+        Node oldConfig;
+
+        try {
+            oldConfig = new XmlParser().parse(item.getConfigFile().getFile());
+        } catch (Exception e) {
+            throw new DslException(format(
+                    Messages.UpdateExistingItem_CouldNotReadConfig(),
+                    item.getConfigFile().getFile().getAbsolutePath(),
+                    item.getFullName()
+            ), e);
+        }
+
+        if (!oldConfig.name().equals(dslItem.getNode().name())) {
+            throw new DslException(format(
+                    Messages.UpdateExistingItem_ItemTypeDoesNotMatch(),
+                    item.getFullName()
+            ));
+        }
     }
 
     private boolean createNewItem(String path, javaposse.jobdsl.dsl.Item dslItem) {

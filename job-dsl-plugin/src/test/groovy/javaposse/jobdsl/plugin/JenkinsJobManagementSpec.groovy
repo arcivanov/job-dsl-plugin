@@ -17,6 +17,7 @@ import javaposse.jobdsl.dsl.ConfigFile
 import javaposse.jobdsl.dsl.ConfigFileType
 import javaposse.jobdsl.dsl.ConfigurationMissingException
 import javaposse.jobdsl.dsl.DslException
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.NameNotProvidedException
@@ -80,6 +81,30 @@ class JenkinsJobManagementSpec extends Specification {
 
         then:
         thrown(Failure)
+    }
+
+    def 'logPluginDeprecationWarning for unknown plugin'() {
+        when:
+        jobManagement.logPluginDeprecationWarning('foo', '1.2.3')
+
+        then:
+        buffer.size() == 0
+    }
+
+    def 'logPluginDeprecationWarning for plugin'() {
+        when:
+        jobManagement.logPluginDeprecationWarning('ldap', '20.0')
+
+        then:
+        buffer.toString() =~ /Warning: \(.+, line \d+\) support for LDAP Plugin versions older than 20.0 is deprecated/
+    }
+
+    def 'logPluginDeprecationWarning does not log anything if plugin version is newer'() {
+        when:
+        jobManagement.logPluginDeprecationWarning('ldap', '1.0')
+
+        then:
+        buffer.size() == 0
     }
 
     def 'checkMinimumPluginVersion not installed'() {
@@ -186,13 +211,13 @@ class JenkinsJobManagementSpec extends Specification {
 
     def 'extension is being notified'() {
         when:
-        jobManagement.createOrUpdateConfig('test-123', loadResource('config.xml'), true)
+        jobManagement.createOrUpdateConfig(createItem('test-123', '/config.xml'), false)
 
         then:
         ContextExtensionPoint.all().get(TestContextExtensionPoint).isItemCreated('test-123')
 
         when:
-        jobManagement.createOrUpdateConfig('test-123', loadResource('config2.xml'), false)
+        jobManagement.createOrUpdateConfig(createItem('test-123', '/config2.xml'), false)
 
         then:
         ContextExtensionPoint.all().get(TestContextExtensionPoint).isItemUpdated('test-123')
@@ -344,7 +369,7 @@ class JenkinsJobManagementSpec extends Specification {
 
     def 'createOrUpdateConfig with changing element order'() {
         when:
-        jobManagement.createOrUpdateConfig('project', Resources.toString(getResource('order-a.xml'), UTF_8), false)
+        jobManagement.createOrUpdateConfig(createItem('project', '/order-a.xml'), false)
 
         then:
         FreeStyleProject job = jenkinsRule.jenkins.getItemByFullName('project') as FreeStyleProject
@@ -352,7 +377,7 @@ class JenkinsJobManagementSpec extends Specification {
         job.publishersList[1] instanceof AggregatedTestResultPublisher
 
         when:
-        jobManagement.createOrUpdateConfig('project', Resources.toString(getResource('order-b.xml'), UTF_8), false)
+        jobManagement.createOrUpdateConfig(createItem('project', '/order-b.xml'), false)
 
         then:
         job.publishersList[0] instanceof AggregatedTestResultPublisher
@@ -375,6 +400,18 @@ class JenkinsJobManagementSpec extends Specification {
 
         then:
         0 * saveableListener.onChange(job, _)
+    }
+
+    def 'createOrUpdateConfig should fail if item type does not match'() {
+        setup:
+        jenkinsRule.createMatrixProject('my-job')
+
+        when:
+        jobManagement.createOrUpdateConfig(createItem('my-job', '/minimal-job.xml'), false)
+
+        then:
+        Exception e = thrown(DslException)
+        e.message == 'Type of item "my-job" does not match existing type, item type can not be changed'
     }
 
     def 'get plugin version'() {
@@ -558,7 +595,7 @@ class JenkinsJobManagementSpec extends Specification {
         jobManagement.readFileInWorkspace(fileName)
 
         then:
-        Exception e = thrown(IllegalStateException)
+        Exception e = thrown(DslScriptException)
         e.message.contains(fileName)
     }
 
@@ -658,5 +695,19 @@ class JenkinsJobManagementSpec extends Specification {
 
     private static String loadResource(String resourceName) {
         Resources.toString(getResource(resourceName), UTF_8)
+    }
+
+    private Item createItem(String name, String config) {
+        new Item(jobManagement) {
+            @Override
+            String getName() {
+                name
+            }
+
+            @Override
+            Node getNode() {
+                new XmlParser().parse(JenkinsJobManagementSpec.getResourceAsStream(config))
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.helpers
 
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.WithXmlActionSpec
@@ -35,7 +36,7 @@ class ScmContextSpec extends Specification {
             branch[0].text() == ''
         }
         1 * mockJobManagement.requirePlugin('mercurial')
-        1 * mockJobManagement.logDeprecationWarning('support for Mercurial plugin versions older than 1.50.1')
+        1 * mockJobManagement.logPluginDeprecationWarning('mercurial', '1.50.1')
     }
 
     def 'call hg simple with branch and deprecated plugin version'() {
@@ -56,7 +57,7 @@ class ScmContextSpec extends Specification {
             clean[0].text() == 'false'
         }
         1 * mockJobManagement.requirePlugin('mercurial')
-        1 * mockJobManagement.logDeprecationWarning('support for Mercurial plugin versions older than 1.50.1')
+        1 * mockJobManagement.logPluginDeprecationWarning('mercurial', '1.50.1')
     }
 
     def 'call hg simple configuration'() {
@@ -111,7 +112,7 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call hg branch and tag disallowed'() {
@@ -122,7 +123,7 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call hg with branch'() {
@@ -256,6 +257,7 @@ class ScmContextSpec extends Specification {
             refspec[0].text() == '+refs/heads/master:refs/remotes/other/master'
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with relativeTargetDir'() {
@@ -272,6 +274,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].relativeTargetDir.size() == 1
         context.scmNodes[0].relativeTargetDir[0].text() == 'checkout'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second relativeTargetDirs'() {
@@ -289,6 +292,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].relativeTargetDir.size() == 1
         context.scmNodes[0].relativeTargetDir[0].text() == 'checkout'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with reference'() {
@@ -308,6 +312,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].reference.size() == 1
         context.scmNodes[0].reference[0].text() == '/foo/bar'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second reference'() {
@@ -328,6 +333,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].reference.size() == 1
         context.scmNodes[0].reference[0].text() == '/foo/baz'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with reference, plugin version 2.x'() {
@@ -353,6 +359,7 @@ class ScmContextSpec extends Specification {
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].shallow[0].value() == false
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with shallowClone'() {
@@ -372,6 +379,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].useShallowClone.size() == 1
         context.scmNodes[0].useShallowClone[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with shallowClone, no argument'() {
@@ -391,6 +399,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].useShallowClone.size() == 1
         context.scmNodes[0].useShallowClone[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second shallowClone'() {
@@ -411,6 +420,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].useShallowClone.size() == 1
         context.scmNodes[0].useShallowClone[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with shallowClone, plugin version 2.x'() {
@@ -436,6 +446,7 @@ class ScmContextSpec extends Specification {
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].shallow[0].value() == true
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with cloneTimeout, plugin version 2.x'() {
@@ -463,6 +474,7 @@ class ScmContextSpec extends Specification {
             extensions[0].'hudson.plugins.git.extensions.impl.CloneOption'[0].timeout[0].value() == 50
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with pruneBranches'() {
@@ -479,6 +491,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].pruneBranches.size() == 1
         context.scmNodes[0].pruneBranches[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with pruneBranches, no argument'() {
@@ -495,6 +508,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].pruneBranches.size() == 1
         context.scmNodes[0].pruneBranches[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with localBranch'() {
@@ -511,6 +525,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].localBranch.size() == 1
         context.scmNodes[0].localBranch[0].text() == 'bugfix'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with createTag'() {
@@ -527,6 +542,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].skipTag.size() == 1
         context.scmNodes[0].skipTag[0].text() == 'false'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with skipTag, no argument'() {
@@ -543,6 +559,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].skipTag.size() == 1
         context.scmNodes[0].skipTag[0].text() == 'false'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second skipTag'() {
@@ -560,6 +577,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].skipTag.size() == 1
         context.scmNodes[0].skipTag[0].text() == 'false'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with clean'() {
@@ -576,6 +594,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].clean.size() == 1
         context.scmNodes[0].clean[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with clean, no argument'() {
@@ -592,6 +611,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].clean.size() == 1
         context.scmNodes[0].clean[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second clean'() {
@@ -609,6 +629,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].clean.size() == 1
         context.scmNodes[0].clean[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with wipeOutWorkspace'() {
@@ -625,6 +646,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].wipeOutWorkspace.size() == 1
         context.scmNodes[0].wipeOutWorkspace[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with wipeOutWorkspace, no argument'() {
@@ -641,6 +663,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].wipeOutWorkspace.size() == 1
         context.scmNodes[0].wipeOutWorkspace[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second wipeOutWorkspace'() {
@@ -658,6 +681,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].wipeOutWorkspace.size() == 1
         context.scmNodes[0].wipeOutWorkspace[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with remotePoll'() {
@@ -674,6 +698,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].remotePoll.size() == 1
         context.scmNodes[0].remotePoll[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with remotePoll, no argument'() {
@@ -690,6 +715,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].remotePoll.size() == 1
         context.scmNodes[0].remotePoll[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second remotePoll'() {
@@ -707,6 +733,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].remotePoll.size() == 1
         context.scmNodes[0].remotePoll[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with no branch'() {
@@ -723,6 +750,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'.size() == 1
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].text() == '**'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with multiple branches'() {
@@ -743,6 +771,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[1].name[0].text() == 'bar'
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[2].name[0].text() == 'test'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with mergeOptions'() {
@@ -765,6 +794,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].userMergeOptions[0].mergeTarget.size() == 1
         context.scmNodes[0].userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second mergeOptions'() {
@@ -788,6 +818,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].userMergeOptions[0].mergeTarget.size() == 1
         context.scmNodes[0].userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with complex mergeOptions'() {
@@ -814,6 +845,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].userMergeOptions[0].mergeTarget.size() == 1
         context.scmNodes[0].userMergeOptions[0].mergeTarget[0].text() == 'acme-plugin'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with mergeOptions, plugin version 2.x'() {
@@ -843,6 +875,7 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy[0].text() == 'default'
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second mergeOptions, plugin version 2.x'() {
@@ -883,6 +916,7 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy[0].text() == 'default'
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with complex mergeOptions, plugin version 2.x'() {
@@ -916,6 +950,95 @@ class ScmContextSpec extends Specification {
             options[0].mergeStrategy[0].text() == 'default'
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
+    }
+
+    def 'call git scm with mergeOptions default mergeStrategy, plugin version 2.x'() {
+        setup:
+        mockJobManagement.getPluginVersion('git') >> new VersionNumber('2.0.0')
+
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            mergeOptions('acme-plugin')
+        }
+
+        then:
+        context.scmNodes[0] != null
+        context.scmNodes[0].extensions.size() == 1
+        context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 1
+        with(context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
+            options.size() == 1
+            options[0].children().size() == 3
+            options[0].mergeRemote.size() == 1
+            options[0].mergeRemote[0].text() == ''
+            options[0].mergeTarget.size() == 1
+            options[0].mergeTarget[0].text() == 'acme-plugin'
+            options[0].mergeStrategy.size() == 1
+            options[0].mergeStrategy[0].text() == 'default'
+        }
+        1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
+    }
+
+    def 'call git scm with mergeOptions given mergeStrategy, plugin version 2.x'() {
+        setup:
+        mockJobManagement.getPluginVersion('git') >> new VersionNumber('2.0.0')
+
+        when:
+        context.git {
+            remote {
+                url('https://github.com/jenkinsci/job-dsl-plugin.git')
+            }
+            remote {
+                name('other')
+                url('https://github.com/daspilker/job-dsl-plugin.git')
+            }
+            mergeOptions {
+                remote('other')
+                branch('acme-plugin')
+                strategy(mergeStrategy)
+            }
+        }
+
+        then:
+        context.scmNodes[0] != null
+        context.scmNodes[0].extensions.size() == 1
+        context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'.size() == 1
+        with(context.scmNodes[0].extensions[0].'hudson.plugins.git.extensions.impl.PreBuildMerge'[0]) {
+            options.size() == 1
+            options[0].children().size() == 3
+            options[0].mergeRemote.size() == 1
+            options[0].mergeRemote[0].text() == 'other'
+            options[0].mergeTarget.size() == 1
+            options[0].mergeTarget[0].text() == 'acme-plugin'
+            options[0].mergeStrategy.size() == 1
+            options[0].mergeStrategy[0].text() == mergeStrategy
+        }
+        1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.requireMinimumPluginVersion('git', '2.0.0')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
+
+        where:
+        mergeStrategy << ['default', 'resolve', 'recursive', 'octopus', 'ours', 'subtree']
+    }
+
+    def 'call git scm with invalid merge strategy'() {
+        when:
+        context.git {
+            mergeOptions {
+                strategy(mergeStrategy)
+            }
+        }
+
+        then:
+        Exception e = thrown(DslScriptException)
+        e.message =~ /strategy must be one of .+/
+
+        where:
+        mergeStrategy << [null, '', 'test']
     }
 
     def 'call git scm with inverse build chooser'() {
@@ -934,6 +1057,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].buildChooser.size() == 1
         context.scmNodes[0].buildChooser[0].attribute('class') == 'hudson.plugins.git.util.InverseBuildChooser'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with ancestry build chooser'() {
@@ -956,6 +1080,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].buildChooser[0].maximumAgeInDays[0].text() == '5'
         context.scmNodes[0].buildChooser[0].ancestorCommitSha1[0].text() == 'sha1'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with gerrit trigger build chooser'() {
@@ -978,6 +1103,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].buildChooser[0].children().size() == 1
         context.scmNodes[0].buildChooser[0].separator[0].text() == '#'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with credentials'() {
@@ -999,6 +1125,7 @@ class ScmContextSpec extends Specification {
             userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].credentialsId[0].text() == '0815'
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm methods'() {
@@ -1010,6 +1137,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].userRemoteConfigs[0].'hudson.plugins.git.UserRemoteConfig'[0].url[0].value() == GIT_REPO_URL
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == '**'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with branch'() {
@@ -1019,6 +1147,7 @@ class ScmContextSpec extends Specification {
         then:
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'feature-branch'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with stashBrowser'() {
@@ -1038,6 +1167,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.Stash'
         context.scmNodes[0].browser[0].'url'[0].value() == 'http://stash'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with gitblitBrowser'() {
@@ -1058,6 +1188,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].'url'[0].value() == 'http://gitblit'
         context.scmNodes[0].browser[0].'projectName'[0].value() == 'prj-name'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with gitlabBrowser'() {
@@ -1078,6 +1209,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].'url'[0].value() == 'http://gitlab'
         context.scmNodes[0].browser[0].'version'[0].value() == '7.9'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with ignoreNotifyCommit'() {
@@ -1094,6 +1226,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].ignoreNotifyCommit.size() == 1
         context.scmNodes[0].ignoreNotifyCommit[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with ignoreNotifyCommit, no argument'() {
@@ -1110,6 +1243,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].ignoreNotifyCommit.size() == 1
         context.scmNodes[0].ignoreNotifyCommit[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with second ignoreNotifyCommit'() {
@@ -1127,6 +1261,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].ignoreNotifyCommit.size() == 1
         context.scmNodes[0].ignoreNotifyCommit[0].text() == 'true'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with recursiveSubmodules with default true'() {
@@ -1143,6 +1278,7 @@ class ScmContextSpec extends Specification {
             recursiveSubmodules[0].value() == true
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with recursiveSubmodules with param'(boolean value) {
@@ -1159,6 +1295,7 @@ class ScmContextSpec extends Specification {
             recursiveSubmodules[0].value() == value
         }
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         where:
         value << [true, false]
@@ -1182,6 +1319,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].gitTool[0].text() == 'Default'
         context.scmNodes[0].gitTool[1].text() == 'NotDefault'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call git scm with configure on Node'() {
@@ -1200,6 +1338,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].scmName.size() == 1
         context.scmNodes[0].scmName[0].text() == 'Kittner'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call github scm method'() {
@@ -1215,6 +1354,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -1231,6 +1371,7 @@ class ScmContextSpec extends Specification {
         then:
         context.scmNodes[0].branches[0].'hudson.plugins.git.BranchSpec'[0].name[0].value() == 'master'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call github scm method with ssh protocol'() {
@@ -1246,6 +1387,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -1268,6 +1410,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -1298,6 +1441,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].url[0].value() == 'https://github.acme.com/jenkinsci/job-dsl-plugin/'
         context.withXmlActions.size() == 1
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -1319,6 +1463,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].browser[0].attribute('class') == 'hudson.plugins.git.browser.GithubWeb'
         context.scmNodes[0].browser[0].url[0].value() == 'https://github.com/jenkinsci/job-dsl-plugin/'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call github scm with branch and closure'() {
@@ -1334,6 +1479,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].gitConfigName.size() == 1
         context.scmNodes[0].gitConfigName[0].text() == 'john'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call github scm with branch, protocol and closure'() {
@@ -1351,6 +1497,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].gitConfigName.size() == 1
         context.scmNodes[0].gitConfigName[0].text() == 'john'
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call github scm method with protocol, host and closure '() {
@@ -1370,6 +1517,7 @@ class ScmContextSpec extends Specification {
         context.scmNodes[0].gitConfigName[0].text() == 'john'
         context.withXmlActions.size() == 1
         1 * mockJobManagement.requirePlugin('git')
+        1 * mockJobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.withXmlActions[0].execute(root)
@@ -1442,7 +1590,7 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalStateException)
+        thrown(DslScriptException)
     }
 
     def 'call svn with one location'() {
@@ -1999,7 +2147,7 @@ class ScmContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call rtc with build definition'() {

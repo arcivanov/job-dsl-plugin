@@ -43,6 +43,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -219,10 +220,10 @@ public class ExecuteDslScripts extends Builder {
                         targets, usingScriptText, scriptText, ignoreExisting, additionalClasspath
                 );
 
-                Set<GeneratedJob> freshJobs = Sets.newLinkedHashSet();
-                Set<GeneratedView> freshViews = Sets.newLinkedHashSet();
-                Set<GeneratedConfigFile> freshConfigFiles = Sets.newLinkedHashSet();
-                Set<GeneratedUserContent> freshUserContents = Sets.newLinkedHashSet();
+                Set<GeneratedJob> freshJobs = new LinkedHashSet<GeneratedJob>();
+                Set<GeneratedView> freshViews = new LinkedHashSet<GeneratedView>();
+                Set<GeneratedConfigFile> freshConfigFiles = new LinkedHashSet<GeneratedConfigFile>();
+                Set<GeneratedUserContent> freshUserContents = new LinkedHashSet<GeneratedUserContent>();
                 for (ScriptRequest request : scriptRequests) {
                     LOGGER.log(Level.FINE, String.format("Request for %s", request.getLocation()));
 
@@ -253,7 +254,7 @@ public class ExecuteDslScripts extends Builder {
                 generator.close();
             }
         } catch (DslException e) {
-            LOGGER.log(Level.FINE, String.format("Exception while processing DSL scripts: %s", e.getMessage()));
+            LOGGER.log(Level.FINE, String.format("Exception while processing DSL scripts: %s", e.getMessage()), e);
             throw new AbortException(e.getMessage());
         }
     }
@@ -466,7 +467,7 @@ public class ExecuteDslScripts extends Builder {
                 return input.getTemplateName();
             }
         });
-        return Sets.newLinkedHashSet(Collections2.filter(templateNames, Predicates.notNull()));
+        return new LinkedHashSet<String>(Collections2.filter(templateNames, Predicates.notNull()));
     }
 
     private static class SeedNamePredicate implements Predicate<SeedReference> {

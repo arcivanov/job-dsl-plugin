@@ -1,8 +1,8 @@
 package javaposse.jobdsl.dsl.helpers.step
 
-import com.google.common.base.Preconditions
 import javaposse.jobdsl.dsl.Context
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.helpers.common.DownstreamTriggerContext
 
@@ -25,6 +25,7 @@ class PhaseJobContext implements Context {
     String nodeLabelParam
     List<String> props = []
     boolean disableJob = false
+    boolean abortAllJobs = false
     String killPhaseCondition = 'FAILURE'
     Closure configureClosure
 
@@ -117,6 +118,14 @@ class PhaseJobContext implements Context {
     @RequiresPlugin(id = 'jenkins-multijob-plugin', minimumVersion = '1.11')
     void disableJob(boolean disableJob = true) {
         this.disableJob = disableJob
+    }
+
+    /**
+     * @since 1.37
+     */
+    @RequiresPlugin(id = 'jenkins-multijob-plugin', minimumVersion = '1.14')
+    void abortAllJobs(boolean abortAllJob = true) {
+        this.abortAllJobs = abortAllJob
     }
 
     /**

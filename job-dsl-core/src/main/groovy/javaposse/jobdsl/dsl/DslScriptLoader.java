@@ -1,22 +1,22 @@
 package javaposse.jobdsl.dsl;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import groovy.lang.Binding;
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.Script;
 import groovy.util.GroovyScriptEngine;
+import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilerConfiguration;
-import org.codehaus.groovy.control.customizers.ASTTransformationCustomizer;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
 import org.codehaus.groovy.runtime.InvokerHelper;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,10 +56,17 @@ public class DslScriptLoader {
             Script script;
             if (scriptRequest.getBody() != null) {
                 jobManagement.getOutputStream().println("Processing provided DSL script");
-                Class cls = engine.getGroovyClassLoader().parseClass(scriptRequest.getBody());
+                Class cls = engine.getGroovyClassLoader().parseClass(scriptRequest.getBody(), "script");
                 script = InvokerHelper.createScript(cls, binding);
             } else {
                 jobManagement.getOutputStream().printf("Processing DSL script %s\n", scriptRequest.getLocation());
+                if (!isValidScriptName(scriptRequest.getLocation())) {
+                    jobManagement.logDeprecationWarning(
+                            "script names may only contain letters, digits and underscores, but may not start with a digit; support for arbitrary names",
+                            scriptRequest.getLocation(),
+                            -1
+                    );
+                }
                 script = engine.createScript(scriptRequest.getLocation(), binding);
             }
             assert script instanceof JobParent;
@@ -69,7 +76,15 @@ public class DslScriptLoader {
 
             binding.setVariable("jobFactory", jp);
 
-            script.run();
+            try {
+                script.run();
+            } catch (DslScriptException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                throw new DslScriptException(e.getMessage(), e);
+            }
+        } catch (CompilationFailedException e) {
+            throw new DslException(e.getMessage(), e);
         } catch (Exception e) { // ResourceException or ScriptException
             if (e instanceof RuntimeException) {
                 throw ((RuntimeException) e);
@@ -78,6 +93,22 @@ public class DslScriptLoader {
             }
         }
         return jp;
+    }
+
+    private static boolean isValidScriptName(String scriptFile) {
+        int idx = scriptFile.lastIndexOf('.');
+        if (idx > -1) {
+            scriptFile = scriptFile.substring(0, idx);
+        }
+        if (scriptFile.length() == 0 || !Character.isJavaIdentifierStart(scriptFile.charAt(0))) {
+            return false;
+        }
+        for (int i = 1; i < scriptFile.length(); i += 1) {
+            if (!Character.isJavaIdentifierPart(scriptFile.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -105,9 +136,9 @@ public class DslScriptLoader {
 
     private static Set<GeneratedJob> extractGeneratedJobs(JobParent jp, boolean ignoreExisting) throws IOException {
         // Iterate jobs which were setup, save them, and convert to a serializable form
-        Set<GeneratedJob> generatedJobs = Sets.newLinkedHashSet();
+        Set<GeneratedJob> generatedJobs = new LinkedHashSet<GeneratedJob>();
         if (jp != null) {
-            List<Item> referencedItems = Lists.newArrayList(jp.getReferencedJobs()); // As List
+            List<Item> referencedItems = new ArrayList<Item>(jp.getReferencedJobs()); // As List
             Collections.sort(referencedItems, ITEM_COMPARATOR);
             for (Item item : referencedItems) {
                 String xml = item.getXml();
@@ -127,7 +158,7 @@ public class DslScriptLoader {
     }
 
     private static Set<GeneratedView> extractGeneratedViews(JobParent jp, boolean ignoreExisting) {
-        Set<GeneratedView> generatedViews = Sets.newLinkedHashSet();
+        Set<GeneratedView> generatedViews = new LinkedHashSet<GeneratedView>();
         for (View view : jp.getReferencedViews()) {
             String xml = view.getXml();
             LOGGER.log(Level.FINE, String.format("Saving view %s as %s", view.getName(), xml));
@@ -139,7 +170,7 @@ public class DslScriptLoader {
     }
 
     private static Set<GeneratedConfigFile> extractGeneratedConfigFiles(JobParent jp, boolean ignoreExisting) {
-        Set<GeneratedConfigFile> generatedConfigFiles = Sets.newLinkedHashSet();
+        Set<GeneratedConfigFile> generatedConfigFiles = new LinkedHashSet<GeneratedConfigFile>();
         for (ConfigFile configFile : jp.getReferencedConfigFiles()) {
             LOGGER.log(Level.FINE, String.format("Saving config file %s", configFile.getName()));
             String id = jp.getJm().createOrUpdateConfigFile(configFile, ignoreExisting);
@@ -149,7 +180,7 @@ public class DslScriptLoader {
     }
 
     private static Set<GeneratedUserContent> extractGeneratedUserContents(JobParent jp, boolean ignoreExisting) {
-        Set<GeneratedUserContent> generatedUserContents = Sets.newLinkedHashSet();
+        Set<GeneratedUserContent> generatedUserContents = new LinkedHashSet<GeneratedUserContent>();
         for (UserContent userContent : jp.getReferencedUserContents()) {
             LOGGER.log(Level.FINE, String.format("Saving user content %s", userContent.getPath()));
             jp.getJm().createOrUpdateUserContent(userContent, ignoreExisting);
@@ -159,7 +190,7 @@ public class DslScriptLoader {
     }
 
     static void scheduleJobsToRun(List<String> jobNames, JobManagement jobManagement) {
-        Map<String, Throwable> exceptions = Maps.newHashMap();
+        Map<String, Throwable> exceptions = new HashMap<String, Throwable>();
         for (String jobName : jobNames) {
             try {
                 jobManagement.queueJob(jobName);
@@ -207,9 +238,6 @@ public class DslScriptLoader {
         icz.addImports("javaposse.jobdsl.dsl.helpers.scm.SvnDepth");
         icz.addImports("javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation");
         config.addCompilationCustomizers(icz);
-
-        GrabDeprecationTransformation grabDeprecationTransformation = new GrabDeprecationTransformation(jobManagement);
-        config.addCompilationCustomizers(new ASTTransformationCustomizer(grabDeprecationTransformation));
 
         config.setOutput(new PrintWriter(jobManagement.getOutputStream())); // This seems to do nothing
         return config;

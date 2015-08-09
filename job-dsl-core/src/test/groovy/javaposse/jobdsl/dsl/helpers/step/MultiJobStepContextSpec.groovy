@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.helpers.step
 
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import spock.lang.Specification
@@ -152,6 +153,8 @@ class MultiJobStepContextSpec extends Specification {
             'org.jvnet.jenkins.plugins.nodelabelparameter.parameterizedtrigger.NodeLabelBuildParameter'[0]
         nodeLabel.name[0].value() == 'nodeParam'
         nodeLabel.nodeLabel[0].value() == 'node_label'
+
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
     }
 
     def 'call phases with multiple calls'() {
@@ -164,7 +167,7 @@ class MultiJobStepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalStateException)
+        thrown(DslScriptException)
 
         when:
         context.phase('Third') {
@@ -175,7 +178,7 @@ class MultiJobStepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalStateException)
+        thrown(DslScriptException)
     }
 
     def 'call phases with plugin version 1.11 options'() {
@@ -187,6 +190,7 @@ class MultiJobStepContextSpec extends Specification {
             phaseName 'Second'
             job('JobA') {
                 disableJob()
+                abortAllJobs()
                 killPhaseCondition('UNSTABLE')
             }
         }
@@ -204,6 +208,28 @@ class MultiJobStepContextSpec extends Specification {
         jobNode.killPhaseOnJobResultCondition[0].value() == 'UNSTABLE'
     }
 
+    def 'call phases with plugin version 1.14 options'() {
+        setup:
+        jobManagement.getPluginVersion('jenkins-multijob-plugin') >> new VersionNumber('1.14')
+
+        when:
+        context.phase {
+            phaseName 'Second'
+            job('JobA') {
+                disableJob()
+                abortAllJobs()
+                killPhaseCondition('UNSTABLE')
+            }
+        }
+
+        then:
+        def phaseNode = context.stepNodes[0]
+        def jobNode = phaseNode.phaseJobs[0].'com.tikal.jenkins.plugins.multijob.PhaseJobsConfig'[0]
+        jobNode.children().size() == 7
+        jobNode.abortAllJob[0].value() == true
+        jobNode.disableJob[0].value() == true
+    }
+
     def 'call killPhaseCondition with invalid argument'() {
         when:
         context.phase {
@@ -214,7 +240,7 @@ class MultiJobStepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call phase with unsupported condition'(String condition, String version) {
@@ -226,7 +252,7 @@ class MultiJobStepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         condition | version

@@ -1,9 +1,81 @@
+## Migrating to 1.37
+
+### Multijob
+
+Support for versions older than 1.16 of the
+[Multijob Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Multijob+Plugin) is [[deprecated|Deprecation-Policy]] and
+will be removed.
+
+### Git
+
+Support for versions older than 2.2.6 of the [Git Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+### Groovy Postbuild
+
+Support for versions older than 2.2 of the
+[Groovy Postbuild Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Groovy+Postbuild+Plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+## Migrating to 1.36
+
+### Script Names
+
+Groovy currently does not allow to use arbitrary names for scripts, see
+[GROOVY-4020](https://issues.apache.org/jira/browse/GROOVY-4020). In the Job DSL plugin, it's currently only working by
+accident, so usage of arbitrary names is [[deprecated|Deprecation-Policy]] and will be removed.
+
+In the future only names which contain letters, digits, underscores or dollar signs are allowed, but the name must not
+start with a digit. Basically these are the rules for Java identifiers, see
+[this](http://docs.oracle.com/javase/6/docs/api/java/lang/Character.html#isJavaIdentifierStart%28char%29) and
+[this](http://docs.oracle.com/javase/6/docs/api/java/lang/Character.html#isJavaIdentifierPart%28char%29)) for details.
+The file name extension can be anything and is ignored.  
+
+### Build Blocker
+
+Support for versions older than 1.7.1 of the
+[Build Blocker Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Blocker+Plugin) is
+[[deprecated|Deprecation-Policy]] and will be removed.
+
+### JobManagement
+
+The following method in the `JobManagement` interface has been [[deprecated|Deprecation-Policy]] and will be removed
+along with all implementations:
+
+```groovy
+String getCredentialsId(String credentialsDescription)
+```
+
+Finding credentials by description has been deprecated some time ago, so this method is no longer needed.
+
+### AbstractJobManagement
+
+The following methods in AbstractJobManagement have been [[deprecated|Deprecation-Policy]] and will be removed:
+
+```groovy
+protected static List<StackTraceElement> getStackTrace()
+
+protected static String getSourceDetails(List<StackTraceElement> stackTrace)
+
+protected static String getSourceDetails(String scriptName, int lineNumber)
+
+protected void logWarning(String message, Object... args)
+```
+
+### Exception Handling
+
+DSL methods will now throw a `javaposse.jobdsl.dsl.DslException` instead of `java.lang.IllegalArgumentException`,
+`java.lang.IllegalStateException` or `java.lang.NullPointerException` when validating arguments.
+
+The `javaposse.jobdsl.dsl.DslScriptLoader` will also throw a `javaposse.jobdsl.dsl.DslException` on script errors like
+compilation failures and missing methods or properties.
+
 ## Migrating to 1.35
 
 ### Maven
 
 Support for versions older than 2.3 of the
-[[Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin) is
+[Maven Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Maven+Project+Plugin) is
 [[deprecated|Deprecation-Policy]] and will be removed.
 
 ### S3

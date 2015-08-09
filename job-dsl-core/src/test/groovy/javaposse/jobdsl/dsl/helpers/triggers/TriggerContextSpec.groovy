@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.helpers.triggers
 
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import spock.lang.Specification
@@ -347,9 +348,7 @@ class TriggerContextSpec extends Specification {
             orgslist[0].value() == ''
         }
         1 * mockJobManagement.requirePlugin('ghprb')
-        1 * mockJobManagement.logDeprecationWarning(
-                'support for GitHub pull request builder plugin versions older than 1.15-0'
-        )
+        1 * mockJobManagement.logPluginDeprecationWarning('ghprb', '1.15-0')
     }
 
     def 'call pull request trigger with plugin version 1.14'() {
@@ -377,9 +376,7 @@ class TriggerContextSpec extends Specification {
             commentFilePath[0].value() == ''
         }
         1 * mockJobManagement.requirePlugin('ghprb')
-        1 * mockJobManagement.logDeprecationWarning(
-                'support for GitHub pull request builder plugin versions older than 1.15-0'
-        )
+        1 * mockJobManagement.logPluginDeprecationWarning('ghprb', '1.15-0')
     }
 
     def 'call pull request trigger with multiple admins and orgs'() {
@@ -648,7 +645,7 @@ class TriggerContextSpec extends Specification {
         context.upstream(projects, threshold)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         projects | threshold
@@ -707,6 +704,6 @@ class TriggerContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 }

@@ -2,6 +2,7 @@ package javaposse.jobdsl.dsl.helpers.step
 
 import hudson.util.VersionNumber
 import javaposse.jobdsl.dsl.ConfigFileType
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.Item
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation
@@ -425,7 +426,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        Exception e = thrown(NullPointerException)
+        Exception e = thrown(DslScriptException)
         e.message.contains(settingsName)
     }
 
@@ -474,7 +475,7 @@ class StepContextSpec extends Specification {
             usePrivateRepository[0].value() == false
         }
         1 * jobManagement.requirePlugin('maven-plugin')
-        1 * jobManagement.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
+        1 * jobManagement.logPluginDeprecationWarning('maven-plugin', '2.3')
     }
 
     def 'call ant methods'() {
@@ -1177,7 +1178,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call dsl with invalid remove action'() {
@@ -1187,7 +1188,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call dsl with invalid remove view action'() {
@@ -1197,7 +1198,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call dsl with script text and all options'() {
@@ -1368,7 +1369,7 @@ class StepContextSpec extends Specification {
         context.publishOverSsh(null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call publishOverSsh without transferSet'() {
@@ -1379,7 +1380,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call publishOverSsh without sourceFiles and execCommand'() {
@@ -1392,7 +1393,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call publishOverSsh with minimal configuration and check the default values'() {
@@ -1640,9 +1641,11 @@ class StepContextSpec extends Specification {
             Node unstableThreshold = thresholds.unstableThreshold[0]
             unstableThreshold.name[0].value() == 'UNSTABLE'
             unstableThreshold.ordinal[0].value() == 1
+            unstableThreshold.completeBuild[0].value() == true
             Node failureThreshold = thresholds.failureThreshold[0]
             failureThreshold.name[0].value() == 'FAILURE'
             failureThreshold.ordinal[0].value() == 2
+            failureThreshold.completeBuild[0].value() == true
             Node buildStepFailureThreshold = thresholds.buildStepFailureThreshold[0]
             buildStepFailureThreshold.name[0].value() == 'FAILURE'
         }
@@ -1657,6 +1660,7 @@ class StepContextSpec extends Specification {
         1 * jobManagement.requirePlugin('parameterized-trigger')
         1 * jobManagement.requirePlugin('git')
         1 * jobManagement.requirePlugin('nodelabelparameter')
+        1 * jobManagement.logPluginDeprecationWarning('git', '2.2.6')
 
         when:
         context.downstreamParameterized {
@@ -1679,7 +1683,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     @Unroll
@@ -1777,7 +1781,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call conditional steps with no condition'() {
@@ -1792,7 +1796,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(NullPointerException)
+        thrown(DslScriptException)
     }
 
     def 'call conditional steps with invalid condition'() {
@@ -1925,6 +1929,29 @@ class StepContextSpec extends Specification {
         1 * jobManagement.requirePlugin('conditional-buildstep')
     }
 
+    def 'fileMatch is added correctly'() {
+        when:
+        context.conditionalSteps {
+            condition {
+                filesMatch('someFile')
+            }
+            steps {
+                shell('echo Test')
+            }
+        }
+
+        then:
+        Node step = context.stepNodes[0]
+        step.runCondition[0].children().size() == 3
+
+        Node condition = step.runCondition[0]
+        condition.attribute('class') == 'org.jenkins_ci.plugins.run_condition.core.FilesMatchCondition'
+        condition.includes[0].value() == 'someFile'
+        condition.excludes[0].value() == ''
+        condition.baseDir[0].attribute('class') == 'org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace'
+        1 * jobManagement.requirePlugin('conditional-buildstep')
+    }
+
     def 'status condition is added correctly'() {
         when:
         context.conditionalSteps {
@@ -2049,7 +2076,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         worstResult | bestResult
@@ -2278,13 +2305,13 @@ class StepContextSpec extends Specification {
         context.remoteTrigger(null, 'test')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.remoteTrigger('', 'test')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call remoteTrigger without job'() {
@@ -2292,13 +2319,13 @@ class StepContextSpec extends Specification {
         context.remoteTrigger('dev-ci', null)
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         when:
         context.remoteTrigger('dev-ci', '')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'critical block'() {
@@ -2454,7 +2481,7 @@ class StepContextSpec extends Specification {
         context.setBuildResult('FOO')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'vSphere power off'() {
@@ -2529,7 +2556,7 @@ class StepContextSpec extends Specification {
         context.vSpherePowerOff('vsphere.acme.org', 'foo')
 
         then:
-        thrown(NullPointerException)
+        thrown(DslScriptException)
     }
 
     def 'call http request with minimal options'() {
@@ -2576,7 +2603,7 @@ class StepContextSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'call http request with valid HTTP mode'(String mode) {
@@ -2599,6 +2626,77 @@ class StepContextSpec extends Specification {
         mode << ['GET', 'POST', 'PUT', 'DELETE']
     }
 
+    def 'call clangScanBuild with minimum options'() {
+        when:
+        context.clangScanBuild {
+            workspace('foo')
+            scheme('bar')
+            clangInstallationName('test')
+        }
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'jenkins.plugins.clangscanbuild.ClangScanBuildBuilder'
+            children().size() == 7
+            targetSdk[0].value() == 'iphonesimulator'
+            config[0].value() == 'Debug'
+            clangInstallationName[0].value() == 'test'
+            workspace[0].value() == 'foo'
+            scheme[0].value() == 'bar'
+            scanbuildargs[0].value() == '--use-analyzer Xcode'
+            xcodebuildargs[0].value() == '-derivedDataPath $WORKSPACE/build'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('clang-scanbuild-plugin', '1.6')
+    }
+
+    def 'call clangScanBuild with all options'() {
+        when:
+        context.clangScanBuild {
+            targetSdk('1')
+            configuration('2')
+            clangInstallationName('3')
+            workspace('4')
+            scheme('5')
+            scanBuildArgs('6')
+            xcodeBuildArgs('7')
+        }
+
+        then:
+        with(context.stepNodes[0]) {
+            name() == 'jenkins.plugins.clangscanbuild.ClangScanBuildBuilder'
+            children().size() == 7
+            targetSdk[0].value() == '1'
+            config[0].value() == '2'
+            clangInstallationName[0].value() == '3'
+            workspace[0].value() == '4'
+            scheme[0].value() == '5'
+            scanbuildargs[0].value() == '6'
+            xcodebuildargs[0].value() == '7'
+        }
+        1 * jobManagement.requireMinimumPluginVersion('clang-scanbuild-plugin', '1.6')
+    }
+
+    def 'call clangScanBuild with missing options'() {
+        when:
+        context.clangScanBuild {
+            workspace(workspaceOption)
+            scheme(schemeOption)
+            clangInstallationName(clangInstallationNameOption)
+        }
+
+        then:
+        thrown(DslScriptException)
+
+        where:
+        workspaceOption | schemeOption | clangInstallationNameOption
+        'foo'           | 'bar'        | ''
+        'foo'           | 'bar'        | null
+        'foo'           | ''           | 'test'
+        'foo'           | null         | 'test'
+        ''              | 'bar'        | 'test'
+        null            | 'bar'        | 'test'
+    }
+
     def 'call nodejsCommand method'() {
         when:
         context.nodejsCommand('var test = require("node");', 'node (0.0.1)')
@@ -2611,6 +2709,14 @@ class StepContextSpec extends Specification {
             nodeJSInstallationName[0].value() == 'node (0.0.1)'
         }
         1 * jobManagement.requirePlugin('nodejs')
+    }
+
+    def 'call debian package without required option'() {
+        when:
+        context.debianPackage ''
+
+        then:
+        thrown(DslScriptException)
     }
 
     def 'call debian package with only required option'() {

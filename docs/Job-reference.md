@@ -14,9 +14,12 @@ freeStyleJob(String name) { // since 1.30
     batchTask(String name, String script)
     blockOn(String projectNames)
     blockOn(Iterable<String> projectNames)
+    blockOn(String projectNames, Closure closure) // since 1.36
+    blockOn(Iterable<String> projectNames, Closure closure) // since 1.36
     blockOnDownstreamProjects()
     blockOnUpstreamProjects()
     checkoutRetryCount(int times = 3)
+    compressBuildLog() // since 1.36
     concurrentBuild(boolean allowConcurrentBuild = true) // since 1.21
     customWorkspace(String workspacePath)
     deliveryPipelineConfiguration(String stageName, String taskName = null) // since 1.26
@@ -36,12 +39,13 @@ freeStyleJob(String name) { // since 1.30
     priority(int value)
     quietPeriod(int seconds = 5)
     throttleConcurrentBuilds(Closure throttleClosure)
+    weight(int weight) // since 1.36
     authorization {
         permission(String permission)
         permission(String permission, String user)
         permission(Permissions perm, String user) // deprecated since 1.31
         permissionAll(String user)
-        blocksInheritance(boolean blocksInheritance = true) // since 1.35 
+        blocksInheritance(boolean blocksInheritance = true) // since 1.35
     }
     parameters {
         booleanParam(String parameterName, boolean defaultValue = false,
@@ -61,6 +65,7 @@ freeStyleJob(String name) { // since 1.30
                     String description = null)
         textParam(String parameterName, String defaultValue = null,
                   String description = null)
+        activeChoiceParam(String paramName, Closure closure) // since 1.36
     }
     scm {
         baseClearCase(Closure closure) // since 1.24
@@ -139,6 +144,7 @@ freeStyleJob(String name) { // since 1.30
             Closure antClosure = null)
         batchFile(String command)
         buildDescription(String regexp, String description = null) // since 1.31
+        clangScanBuild(Closure clangScanBuildClosure) // since 1.37
         conditionalSteps(Closure conditionalClosure)
         copyArtifacts(String jobName, String includeGlob,
                       Closure buildSelectorClosure)  // deprecated since 1.33
@@ -217,6 +223,7 @@ freeStyleJob(String name) { // since 1.30
         checkstyle(String pattern, Closure staticAnalysisClosure = null)
         chucknorris()
         cobertura(String coberturaReportFilePattern, Closure coberturaClosure = null)
+        debianPackage(String repoId, Closure closure = null) // since 1.36
         dependencyCheck(String pattern, Closure staticAnalysisClosure = null)
         deployArtifacts(Closure deployArtifactsClosure = null) // since 1.31
         downstream(String projectName, String thresholdName = 'SUCCESS')
@@ -237,7 +244,9 @@ freeStyleJob(String name) { // since 1.30
         flowdock(String[] tokens, flowdockClosure = null) // since 1.23
         git(Closure gitPublisherClosure) // since 1.22
         githubCommitNotifier() // since 1.21
-        groovyPostBuild(String script, Behavior behavior = Behavior.DoNothing) // since 1.19
+        groovyPostBuild(String script,
+                        Behavior behavior = Behavior.DoNothing) // since 1.19
+        groovyPostBuild(Closure groovyPostbuildClosure) // since 1.37
         hipChat(Closure hipChatClosure = null) // since 1.33
         irc(Closure ircClosure)
         jacocoCodeCoverage(Closure jacocoClosure)
@@ -274,6 +283,7 @@ freeStyleJob(String name) { // since 1.30
         retryBuild(Closure naginatorClosure = null) // since 1.33
         rundeck(String jobId, Closure rundeckClosure = null) // since 1.24
         s3(String profile, Closure s3Closure) // since 1.26
+        slackNotifications(Closure slackNotificationsClosure) // since 1.36
         sonar(Closure sonarClosure = null) // since 1.31
         stashNotifier(Closure stashNotifierClosure = null) // since 1.23
         tasks(String pattern, excludePattern = '', high = '', normal = '', low = '',
@@ -325,6 +335,7 @@ matrixJob(String name) { // since 1.30
     runSequentially(boolean runSequentially = true)
     touchStoneFilter(String expression, boolean continueOnFailure = false)
     combinationFilter(String expression)
+    childCustomWorkspace(String workspace) // since 1.36
 }
 
 job(type: Matrix, Closure closure) // deprecated since 1.30
@@ -341,7 +352,6 @@ mavenJob(String name) { // since 1.30
     mavenOpts(String mavenOpts)
     mavenInstallation(String name) // since 1.20
     localRepository(LocalRepositoryLocation location)
-    perModuleEmail(boolean shouldSendEmailPerModule) // deprecated since 1.29
     archivingDisabled(boolean shouldDisableArchiving)
     runHeadless(boolean shouldRunHeadless)
     preBuildSteps(Closure stepsClosure)
@@ -458,13 +468,43 @@ Defines a timespan to wait for additional events (pushes, check-ins) before trig
 
 If the number of seconds to wait is omitted from the call the job will be configured to wait for five seconds. If you need to wait for a different amount of time just specify the number of seconds to wait. (Available since 1.16)
 
-### Block build
+### Block Build
+
 ```groovy
-blockOn(String projectName)
-blockOn(Iterable<String> projectNames)
+job {
+    blockOn(String projectName)
+    blockOn(Iterable<String> projectNames)
+    blockOn(String projectName) {              // since 1.36
+        blockLevel(String blockLevel)
+        scanQueueFor(String scanQueueFor)
+    }
+    blockOn(Iterable<String> projectNames) {   // since 1.36
+        blockLevel(String blockLevel)
+        scanQueueFor(String scanQueueFor)
+    }
+}
 ```
 
-Block build if certain jobs are running, supported by the <a href="https://wiki.jenkins-ci.org/display/JENKINS/Build+Blocker+Plugin">Build Blocker Plugin</a>. If more than one name is provided to projectName, it is newline separated. Per the plugin, regular expressions can be used for the projectNames, e.g. ".*-maintenance" will match all maintenance jobs.
+Block build if certain jobs are running. Requires the
+[Build Blocker Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Build+Blocker+Plugin).
+
+Regular expressions can be used for the project names, e.g. `/.*-maintenance/` will match all maintenance jobs.
+
+Possible values for `blockLevel` are `'GLOBAL'` and `'NODE'` (default). Possible values for `scanQueueFor` are `'ALL'`,
+`'BUILDABLE'` and `'DISABLED'` (default).
+
+```groovy
+job('example-1') {
+    blockOn('project-a')
+}
+
+job('example-2') {
+    blockOn(['project-a', 'project-b']) {
+        blockLevel('GLOBAL')
+        scanQueueFor('ALL')
+    }
+}
+```
 
 ### Block on upstream/downstream projects
 ```groovy
@@ -473,6 +513,44 @@ blockOnDownstreamProjects()
 ```
 
 Blocks the build of a project when one ore more upstream (blockOnUpstreamProjects()) or a downstream projects (blockOnDownstreamProjects()) are running. (Available since 1.16)
+
+### Compress Build Log
+
+```groovy
+job {
+    compressBuildLog()
+}
+```
+
+Compress the log file after build completion. Requires the
+[Compress Build Log](https://wiki.jenkins-ci.org/display/JENKINS/Compress+Build+Log+Plugin).
+
+```groovy
+job('example') {
+    compressBuildLog()
+}
+```
+
+(since 1.36)
+
+### Job Weight
+
+```groovy
+job {
+    weight(int weight)
+}
+```
+
+Specify the number of executors to block for this job. Requires the
+[Heavy Job Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Heavy+Job+Plugin).
+
+```groovy
+job('example') {
+    weight(2)
+}
+```
+
+(since 1.36)
 
 ### Build History
 
@@ -605,7 +683,7 @@ job {
         permission(String permission, String user)
         permissionAll(String user)
         permission(Permissions perm, String user) // deprecated since 1.31
-        blocksInheritance(boolean blocksInheritance = true) // since 1.35 
+        blocksInheritance(boolean blocksInheritance = true) // since 1.35
     }
 }
 ```
@@ -763,7 +841,7 @@ Since 1.21.
 
 # Maven
 
-The `rootPOM`, `goals`, `mavenOpts`, `mavenInstallation`, `perModuleEmail`, `archivingDisabled`, `runHeadless`,
+The `rootPOM`, `goals`, `mavenOpts`, `mavenInstallation`, `archivingDisabled`, `runHeadless`,
  `preBuildSteps`, `postBuildSteps` and `providedSettings` methods can only be used in jobs with type `Maven`.
 
 ### Root POM
@@ -845,16 +923,6 @@ mavenJob {
 ```
 
 (Since 1.17)
-
-### Email Per Module
-
-```groovy
-mavenJob {
-    perModuleEmail(boolean sendEmailPerModule) // deprecated since 1.29
-}
-```
-
-Enable or disable email notifications for each Maven module.
 
 ### Disable Artifact Archiving
 
@@ -1073,6 +1141,11 @@ job {
             branch(String name) // calls are accumulated, defaults to '**'
             branches(String... names)
             mergeOptions(String remote = null, String branch)
+            mergeOptions { // since 1.37
+                remote(String remote)
+                branch(String branch)
+                strategy(String mergeStrategy)
+            }
             createTag(boolean createTag = true) // defaults to false
             clean(boolean clean = true) // defaults to false
             wipeOutWorkspace(boolean wipeOut = true) // defaults to false
@@ -1127,6 +1200,8 @@ authentication. The argument for the `credentials` method can either be the ID o
 Note that finding credentials by description has been [[deprecated|Deprecation-Policy]], see [[Migration]].
 
 When Git Plugin version 2.0 or later is used, `mergeOptions` can be called multiple times to merge more than one branch.
+Valid values for `mergeStrategy` are `'default'` (default), `'resolve'`, `'recursive'`, `'octopus'`, `'ours'`, and
+`'subtree'`.
 
 ```groovy
 // checkout repo1 to a sub directory and clean the workspace after checkout
@@ -3242,10 +3317,10 @@ job('example') {
 ```
 multiJob {
     steps {
-        phase(String name, String continuationConditionArg = 'SUCCESSFUL', Closure phaseClosure = null) {
+        phase(String name, String continuationConditionArg = 'SUCCESSFUL') {
             phaseName(String phaseName)
             continuationCondition(String continuationCondition)
-            job(String jobName, boolean currentJobParameters = true, boolean exposedScm = true, Closure phaseJobClosure = null) {
+            job(String jobName, boolean currentJobParameters = true, boolean exposedScm = true) {
                 currentJobParameters(boolean currentJobParameters = true)
                 exposedScm(boolean exposedScm = true)
                 boolParam(String paramName, boolean defaultValue = false)
@@ -3256,7 +3331,8 @@ multiJob {
                 gitRevision(boolean combineQueuedCommits = false)
                 prop(Object key, Object value)
                 props(Map<String, String> map)
-                disableJob(boolean exposedScm = true) // since 1.25
+                disableJob(boolean disableJob = true) // since 1.25
+                abortAllJobs(boolean abortAllJobs = true) //since 1.37
                 killPhaseCondition(String killPhaseCondition) // since 1.25
                 nodeLabel(String paramName, String nodeLabel) // since 1.26
                 configure(Closure configClosure) // since 1.30
@@ -3312,12 +3388,13 @@ multiJob('example') {
 
 (since 1.16)
 
-# [MatrixJob](https://wiki.jenkins-ci.org/display/JENKINS/Building+a+matrix+project)
+# Matrix Job
 
 The `axes`, `sequential`, `touchStoneFiler` and `combinationFilter` methods can only be used in jobs with type `Matrix`.
 Any elements which can be added to a freestyle project can also be added to a MatrixJob and these will be run for each
 of the matrix combinations.
 
+Requires the [Matrix Project Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Matrix+Project+Plugin).
 See also [Building a matrix project](https://wiki.jenkins-ci.org/display/JENKINS/Building+a+matrix+project).
 
 ### Axes
@@ -3344,8 +3421,6 @@ separate label names.
 The configure block can be used to add axes that are currently not supported by the Job DSL Plugin. The `axes` node is
 passed into the configure block.
 
-Example:
-
 ```groovy
 matrixJob('example') {
     axes {
@@ -3368,8 +3443,6 @@ matrixJob {
 
 Run each matrix combination in sequence. If omitted, Jenkins will try to build the combinations in parallel if possible.
 
-Example:
-
 ```groovy
 matrixJob('example') {
     sequential()
@@ -3379,14 +3452,12 @@ matrixJob('example') {
 ### Touchstone Builds
 
 ```groovy
-matrixJob(type) {
+matrixJob {
     touchStoneFilter(String expression, boolean continueOnFailure = false)
 }
 ```
 
 An expression of which combination to run first, the second parameter controls if a failure stops the other builds.
-
-Example:
 
 ```groovy
 matrixJob('example') {
@@ -3397,20 +3468,37 @@ matrixJob('example') {
 ### Combination Filter
 
 ```groovy
-matrixJob(type) {
+matrixJob {
     combinationFilter(String expression)
 }
 ```
 
 An expression to limit which combinations can be run.
 
-Example:
-
 ```groovy
 matrixJob('example') {
     combinationFilter('jdk=="jdk-6" || label=="linux"')
 }
 ```
+
+### Child Custom Workspace
+
+```groovy
+matrixJob {
+    childCustomWorkspace(String workspace)
+}
+```
+
+Explicitly specify custom workspace name for individual child workspaces created for individual axes.
+
+```groovy
+matrixJob('example') {
+    customWorkspace('example')
+    childCustomWorkspace('.') // Reuse the same custom workspace for every axis.
+}
+```
+
+(since 1.36)
 
 # [Prerequisite Build Step](https://wiki.jenkins-ci.org/display/JENKINS/Prerequisite+build+step+plugin)
 
@@ -3544,6 +3632,48 @@ job('example-2') {
 }
 ```
 
+### Clang Scan Build
+
+```groovy
+job {
+    steps {
+        clangScanBuild {
+            workspace(String workspace)
+            scheme(String scheme)
+            clangInstallationName(String name)
+            targetSdk(String targetSdk)
+            configuration(String configuration)
+            scanBuildArgs(String args)
+            xcodeBuildArgs(String args)
+        }
+    }
+}
+```
+
+Supports running a Clang scan-build build step. Requires the
+[Clang Scan-Build Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Clang+Scan-Build+Plugin).
+
+The `workspace`, `scheme` and `clangInstallationName` options are mandatory. The example below shows the default values
+for `targetSdk`, `configuration` , `scanBuildArgs` and `xcodeBuildArgs`.
+
+```groovy
+job('example') {
+    steps {
+        clangScanBuild {
+            workspace('Mobile.xcworkspace')
+            scheme('mobile.de')
+            clangInstallationName('Clang Static Code Analyzer')
+            targetSdk('iphonesimulator')
+            configuration('Debug')
+            scanBuildArgs('--use-analyzer Xcode')
+            xcodeBuildArgs('-derivedDataPath $WORKSPACE/build')
+        }
+    }
+}
+```
+
+(since 1.37)
+
 ### Conditional Build Steps
 
 ```groovy
@@ -3563,6 +3693,8 @@ job {
                 shell(String command)                           // since 1.23
                 batch(String command)                           // since 1.23
                 fileExists(String file, BaseDir baseDir)        // since 1.23
+                filesMatch(String includes, String excludes = '',
+                           BaseDir baseDir = BaseDir.WORKSPACE) // since 1.36
                 not(Closure condition)                          // since 1.23
                 and(Closure... conditions)                      // since 1.23
                 or(Closure... conditions)                       // since 1.23
@@ -4012,6 +4144,52 @@ job('example') {
 
 (since 1.33)
 
+### Slack Publisher
+
+```groovy
+job {
+    publishers {
+        slackNotifications {
+            teamDomain(String domain)      // uses global settings if omitted
+            integrationToken(String token) // uses global settings if omitted
+            projectChannel(String channel) // uses global settings if omitted
+            notifyBuildStart(boolean notify = true)
+            notifyAborted(boolean notify = true)
+            notifyFailure(boolean notify = true)
+            notifyNotBuilt(boolean notify = true)
+            notifySuccess(boolean notify = true)
+            notifyUnstable(boolean notify = true)
+            notifyBackToNormal(boolean notify = true)
+            notifyRepeatedFailure(boolean notify = true)
+            showCommitList(boolean show = true)
+            includeTestSummary(boolean include = true)
+            includeCustomMessage(boolean include = true)
+            customMessage(String message)
+        }
+    }
+}
+```
+
+Allows notifications to be set to Slack. Requires the
+[Slack Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Slack+Plugin).
+
+```groovy
+job('example') {
+    publishers {
+        slackNotifications {
+            projectChannel('Dev Team A')
+            notifyAborted()
+            notifyFailure()
+            notifyNotBuilt()
+            notifyUnstable()
+            notifyBackToNormal()
+        }
+    }
+}
+```
+
+(since 1.36)
+
 ### HTML Publisher
 
 ```groovy
@@ -4191,6 +4369,36 @@ violations(50) {
    jshint(10, 11, 10, 'test-report/*.xml')
 }
 ```
+
+### Debian Package Publisher
+
+```groovy
+job {
+    publishers {
+        debianPackage(String repoId) {
+            commitMessage(String message)
+        }
+    }
+}
+```
+
+Requires the [Debian Package Builder Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Debian+Package+Builder+Plugin).
+
+The required `repoId` parameter specifies the name of the repository to upload to, as specified in the global Jenkins
+configuration. The optional `commitMessage` will commit changes made to package back to SCM. If left empty, nothing will
+be committed.
+
+```groovy
+job('example') {
+    publishers {
+        debianPackage('precise-default') {
+            commitMessage('automatic commit by Jenkins')
+        }
+    }
+}
+```
+
+(since 1.36)
 
 ### Chuck Norris
 
@@ -4826,38 +5034,38 @@ publishers {
 
 (Since 1.19)
 
-### [Groovy Postbuild](https://wiki.jenkins-ci.org/display/JENKINS/Groovy+Postbuild+Plugin)
-
-Executes Groovy scripts after a build.
+### Groovy Postbuild
 
 ```groovy
-groovyPostBuild(String script, Behavior behavior = Behavior.DoNothing)
+job {
+    publishers {
+        groovyPostBuild(String script,
+                        Behavior behavior = Behavior.DoNothing)
+        groovyPostBuild { // since 1.37
+            script(String script)
+            behavior(Behavior behavior)
+            sandbox(boolean sandbox = true)
+        }
+    }
+}
 ```
 
-Arguments:
-* `script` The Groovy script to execute after the build. See [the plugin's page](https://wiki.jenkins-ci.org/display/JENKINS/Groovy+Postbuild+Plugin) for details on what can be done.
-* `behavior` optional. If the script fails, allows you to set mark the build as failed, unstable, or do nothing.
+Executes Groovy scripts after a build. Requires the
+[Groovy Postbuild](https://wiki.jenkins-ci.org/display/JENKINS/Groovy+Postbuild+Plugin).
 
-The behavior argument uses an enum, which currently has three values: DoNothing, MarkUnstable, and MarkFailed.
+The `behavior` argument uses an enum, which currently has three values: `Behavior.DoNothing` (default),
+`Behavior.MarkUnstable`, and `Behavior.MarkFailed`.
 
-Examples:
-
-This example will run a groovy script that prints hello, world and if that fails, it won't affect the build's status:
 ```groovy
-    groovyPostBuild('println "hello, world"')
+// run a groovy script and if that fails will mark the build as failed
+job('example') {
+    publishers {
+        groovyPostBuild('println "hello, world"', Behavior.MarkFailed)
+    }
+}
 ```
 
-This example will run a groovy script, and if that fails will mark the build as failed:
-```groovy
-    groovyPostBuild('// some groovy script', Behavior.MarkFailed)
-```
-
-This example will run a groovy script, and if that fails will mark the build as unstable:
-```groovy
-    groovyPostBuild('// some groovy script', Behavior.MarkUnstable)
-```
-
-(Since 1.19)
+(since 1.19)
 
 ### Archive Javadoc
 
@@ -5383,39 +5591,40 @@ job {
                 deleteOutputFiles(boolean value = true)     // defaults to true
                 stopProcessingIfError(boolean value = true) // defaults to true
             }
-            boostTest { ... }                               // see aUnit closure above
-            cTest { ... }                                   // see aUnit closure above
-            check { ... }                                   // see aUnit closure above
-            cppTest { ... }                                 // see aUnit closure above
-            cppUnit { ... }                                 // see aUnit closure above
-            embUnit { ... }                                 // see aUnit closure above
-            fpcUnit { ... }                                 // see aUnit closure above
-            googleTest { ... }                              // see aUnit closure above
-            jUnit { ... }                                   // see aUnit closure above
-            msTest { ... }                                  // see aUnit closure above
-            mbUnit { ... }                                  // see aUnit closure above
-            nUnit { ... }                                   // see aUnit closure above
-            phpUnit { ... }                                 // see aUnit closure above
-            qTestLib { ... }                                // see aUnit closure above
-            valgrind { ... }                                // see aUnit closure above
+            boostTest { ... }          // see aUnit closure above
+            cTest { ... }              // see aUnit closure above
+            check { ... }              // see aUnit closure above
+            cppTest { ... }            // see aUnit closure above
+            cppUnit { ... }            // see aUnit closure above
+            embUnit { ... }            // see aUnit closure above
+            fpcUnit { ... }            // see aUnit closure above
+            googleTest { ... }         // see aUnit closure above
+            gtester { ... }            // see aUnit closure above, since 1.36
+            jUnit { ... }              // see aUnit closure above
+            msTest { ... }             // see aUnit closure above
+            mbUnit { ... }             // see aUnit closure above
+            nUnit { ... }              // see aUnit closure above
+            phpUnit { ... }            // see aUnit closure above
+            qTestLib { ... }           // see aUnit closure above
+            valgrind { ... }           // see aUnit closure above
             customTool {
                 // all options from the aUnit closure above, plus
-                stylesheet(String url)                      // empty by default
+                stylesheet(String url)        // empty by default
             }
             failedThresholds {
-                unstable(int threshold)                     // defaults to 0
-                unstableNew(int threshold)                  // defaults to 0
-                failure(int threshold)                      // defaults to 0
-                failureNew(int threshold)                   // defaults to 0
+                unstable(int threshold)       // defaults to 0
+                unstableNew(int threshold)    // defaults to 0
+                failure(int threshold)        // defaults to 0
+                failureNew(int threshold)     // defaults to 0
             }
             skippedThresholds {
-                unstable(int threshold)                     // defaults to 0
-                unstableNew(int threshold)                  // defaults to 0
-                failure(int threshold)                      // defaults to 0
-                failureNew(int threshold)                   // defaults to 0
+                unstable(int threshold)       // defaults to 0
+                unstableNew(int threshold)    // defaults to 0
+                failure(int threshold)        // defaults to 0
+                failureNew(int threshold)     // defaults to 0
             }
-            thresholdMode(ThresholdMode mode)               // defaults to ThresholdMode.NUMBER
-            timeMargin(int margin)                          // defaults to 3000
+            thresholdMode(ThresholdMode mode) // defaults to ThresholdMode.NUMBER
+            timeMargin(int margin)            // defaults to 3000
         }
     }
 }
@@ -5800,6 +6009,64 @@ job('example-2') {
 ```
 
 (since 1.26)
+
+### Active Choice Parameter
+
+```groovy
+job {
+    parameters {
+        activeChoiceParam(String paramName) {
+            description(String description)
+            filterable(boolean filterable = true)
+            choiceType(String choiceType)
+            groovyScript {
+                script(String script)
+                fallbackScript(String fallbackScript)
+            }
+            scriptlerScript(String scriptId) {
+                parameter(String name, String value)
+            }
+        }
+    }
+}
+```
+
+Defines a Active Choice parameter with groovy script as source of parameter options. Requires the
+[Active Choices Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Active+Choices+Plugin).
+
+Valid values for `choiceType` are `'SINGLE_SELECT'` (default), `'MULTI_SELECT'`, `'CHECKBOX'` and `'RADIO'`.
+
+```groovy
+job('example-1') {
+    parameters {
+        activeChoiceParam('CHOICE-1') {
+            description('Allows user choose from multiple choices')
+            filterable()
+            choiceType('SINGLE_SELECT')
+            groovyScript {
+                script('["choice1", "choice2"]')
+                fallbackScript('"fallback choice"')
+            }
+        }
+    }
+}
+
+job('example-2') {
+    parameters {
+        activeChoiceParam('CHOICE-1') {
+            description('Allows user choose from multiple choices')
+            filterable()
+            choiceType('SINGLE_SELECT')
+            scriptlerScript('scriptler-script1.groovy') {
+              parameter('param1', 'value1')
+              parameter('param2', 'value2')
+            }
+        }
+    }
+}
+```
+
+(since 1.36)
 
 ### Label Parameter
 

@@ -1,10 +1,10 @@
 package javaposse.jobdsl.dsl.helpers.common
 
-import com.google.common.base.Preconditions
 import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.helpers.common.DownstreamTriggerContext.BlockingThreshold
 
 class DownstreamContext extends AbstractContext {
@@ -85,6 +85,7 @@ class DownstreamContext extends AbstractContext {
                                         name(threshold.thresholdName)
                                         ordinal(threshold.thresholdOrdinal)
                                         color(threshold.thresholdColor)
+                                        completeBuild(true)
                                     }
                                 }
                             }

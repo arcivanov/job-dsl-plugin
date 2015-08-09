@@ -1,11 +1,11 @@
 package javaposse.jobdsl.dsl.helpers.common
 
-import com.google.common.base.Preconditions
 import javaposse.jobdsl.dsl.AbstractContext
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.RequiresPlugin
 
-import static DownstreamContext.THRESHOLD_COLOR_MAP
+import static javaposse.jobdsl.dsl.helpers.common.DownstreamContext.THRESHOLD_COLOR_MAP
 import static javaposse.jobdsl.dsl.helpers.common.DownstreamContext.THRESHOLD_ORDINAL_MAP
 
 class DownstreamTriggerContext extends AbstractContext {
@@ -50,6 +50,8 @@ class DownstreamTriggerContext extends AbstractContext {
 
     @RequiresPlugin(id = 'git')
     void gitRevision(boolean combineQueuedCommits = false) {
+        jobManagement.logPluginDeprecationWarning('git', '2.2.6')
+
         usingGitRevision = true
         this.combineQueuedCommits = combineQueuedCommits
     }

@@ -1,7 +1,7 @@
 package javaposse.jobdsl.dsl
 
-import javaposse.jobdsl.dsl.helpers.ExtensibleContext
 import hudson.util.VersionNumber
+import javaposse.jobdsl.dsl.helpers.ExtensibleContext
 
 /**
  * Interface to manage jobs, which the DSL needs to do.
@@ -12,7 +12,7 @@ interface JobManagement {
      * configuration is returned.
      *
      * @param jobName the name of the job to look up
-     * @return the job configuration as XML
+     * @return the job configuration as XML, never {@code null}
      * @throws JobConfigurationNotFoundException
      */
     String getConfig(String jobName) throws JobConfigurationNotFoundException
@@ -143,6 +143,7 @@ interface JobManagement {
      * @return id of Credentials or <code>null</code> if no credentials could be found
      * @since 1.17
      */
+    @Deprecated
     String getCredentialsId(String credentialsDescription)
 
     /**
@@ -164,6 +165,12 @@ interface JobManagement {
      * @since 1.29
      */
     void logDeprecationWarning(String subject, String scriptName, int lineNumber)
+
+    /**
+     * Logs a deprecation warning for the given plugin if the installed plugin version is older then the given version.
+     * @since 1.36
+     */
+    void logPluginDeprecationWarning(String pluginShortName, String minimumVersion)
 
     /**
      * Logs a warning and sets the build status to unstable if given plugin is not installed.

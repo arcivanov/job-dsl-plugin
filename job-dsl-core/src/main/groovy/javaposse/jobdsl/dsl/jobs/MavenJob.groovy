@@ -1,11 +1,11 @@
 package javaposse.jobdsl.dsl.jobs
 
-import com.google.common.base.Preconditions
 import javaposse.jobdsl.dsl.ConfigFileType
 import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.Job
 import javaposse.jobdsl.dsl.JobManagement
+import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.WithXmlAction
 import javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation
 import javaposse.jobdsl.dsl.helpers.common.MavenContext
@@ -25,6 +25,8 @@ class MavenJob extends Job {
 
     MavenJob(JobManagement jobManagement) {
         super(jobManagement)
+
+        jobManagement.logPluginDeprecationWarning('maven-plugin', '2.3')
     }
 
     @Override
@@ -111,21 +113,6 @@ class MavenJob extends Job {
             }
         }
         this.mavenOpts << mavenOpts
-    }
-
-    /**
-     * If set, Jenkins will send an e-mail notifications for each module, defaults to <code>false</code>.
-     *
-     * @param perModuleEmail set to <code>true</code> to enable per module e-mail notifications
-     */
-    @Deprecated
-    void perModuleEmail(boolean perModuleEmail) {
-        jobManagement.logDeprecationWarning()
-
-        withXmlActions << WithXmlAction.create { Node project ->
-            Node node = methodMissing('perModuleEmail', perModuleEmail)
-            project / node
-        }
     }
 
     /**

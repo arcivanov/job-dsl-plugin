@@ -5,10 +5,12 @@ import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.RequiresPlugin
+import javaposse.jobdsl.dsl.helpers.parameter.ActiveChoiceContext
 
-import static com.google.common.base.Preconditions.checkArgument
-import static com.google.common.base.Preconditions.checkNotNull
 import static java.util.UUID.randomUUID
+import static javaposse.jobdsl.dsl.Preconditions.checkArgument
+import static javaposse.jobdsl.dsl.Preconditions.checkNotNull
+import static javaposse.jobdsl.dsl.Preconditions.checkNotNullOrEmpty
 
 class BuildParametersContext extends AbstractContext {
     Map<String, Node> buildParameterNodes = [:]
@@ -26,10 +28,8 @@ class BuildParametersContext extends AbstractContext {
                       boolean sortZtoA = false, String maxTagsToDisplay = 'all', String defaultValue = null,
                       String description = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
-        checkNotNull(scmUrl, 'scmUrl cannot be null')
-        checkArgument(scmUrl.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
+        checkNotNullOrEmpty(scmUrl, 'scmUrl cannot be null or empty')
 
         Node definitionNode = new Node(null, 'hudson.scm.listtagsparameter.ListSubversionTagsParameterDefinition')
         definitionNode.appendNode('name', parameterName)
@@ -44,15 +44,14 @@ class BuildParametersContext extends AbstractContext {
         if (description != null) {
             definitionNode.appendNode('description', description)
         }
-        definitionNode.appendNode('uuid', UUID.randomUUID())
+        definitionNode.appendNode('uuid', randomUUID())
 
         buildParameterNodes[parameterName] = definitionNode
     }
 
     void choiceParam(String parameterName, List<String> options, String description = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
         checkNotNull(options, 'options cannot be null')
         checkArgument(options.size() > 0, 'at least one option must be specified')
 
@@ -75,8 +74,7 @@ class BuildParametersContext extends AbstractContext {
 
     void fileParam(String fileLocation, String description = null) {
         checkArgument(!buildParameterNodes.containsKey(fileLocation), 'parameter $fileLocation already defined')
-        checkNotNull(fileLocation, 'fileLocation cannot be null')
-        checkArgument(fileLocation.length() > 0)
+        checkNotNullOrEmpty(fileLocation, 'fileLocation cannot be null or empty')
 
         Node definitionNode = new Node(null, 'hudson.model.FileParameterDefinition')
         definitionNode.appendNode('name', fileLocation)
@@ -89,10 +87,8 @@ class BuildParametersContext extends AbstractContext {
 
     void runParam(String parameterName, String jobToRun, String description = null, String filter = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
-        checkNotNull(jobToRun, 'jobToRun cannot be null')
-        checkArgument(jobToRun.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
+        checkNotNullOrEmpty(jobToRun, 'jobToRun cannot be null or empty')
 
         Node definitionNode = new Node(null, 'hudson.model.RunParameterDefinition')
         definitionNode.appendNode('name', parameterName)
@@ -113,8 +109,7 @@ class BuildParametersContext extends AbstractContext {
     @RequiresPlugin(id = 'nodelabelparameter')
     void labelParam(String parameterName, @DslContext(LabelParamContext) Closure labelParamClosure = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
 
         LabelParamContext context = new LabelParamContext()
         ContextHelper.executeInContext(labelParamClosure, context)
@@ -136,8 +131,7 @@ class BuildParametersContext extends AbstractContext {
     @RequiresPlugin(id = 'nodelabelparameter')
     void nodeParam(String parameterName, @DslContext(NodeParamContext) Closure nodeParamClosure = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
 
         NodeParamContext context = new NodeParamContext()
         ContextHelper.executeInContext(nodeParamClosure, context)
@@ -166,8 +160,7 @@ class BuildParametersContext extends AbstractContext {
     @RequiresPlugin(id = 'git-parameter', minimumVersion = '0.4.0')
     void gitParam(String parameterName, @DslContext(GitParamContext) Closure closure = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
 
         GitParamContext context = new GitParamContext()
         ContextHelper.executeInContext(closure, context)
@@ -195,8 +188,7 @@ class BuildParametersContext extends AbstractContext {
 
     private simpleParam(String type, String parameterName, Object defaultValue = null, String description = null) {
         checkArgument(!buildParameterNodes.containsKey(parameterName), 'parameter $parameterName already defined')
-        checkNotNull(parameterName, 'parameterName cannot be null')
-        checkArgument(parameterName.length() > 0)
+        checkNotNullOrEmpty(parameterName, 'parameterName cannot be null or empty')
 
         Node definitionNode = new Node(null, type)
         definitionNode.appendNode('name', parameterName)
@@ -206,5 +198,30 @@ class BuildParametersContext extends AbstractContext {
         }
 
         buildParameterNodes[parameterName] = definitionNode
+    }
+
+    /**
+     * @since 1.36
+     */
+    @RequiresPlugin(id = 'uno-choice', minimumVersion = '1.2')
+    void activeChoiceParam(String paramName, @DslContext(ActiveChoiceContext) Closure closure) {
+        checkNotNull(paramName, 'paramName cannot be null')
+        checkArgument(!buildParameterNodes.containsKey(paramName), 'parameter $paramName already defined')
+
+        ActiveChoiceContext context = new ActiveChoiceContext()
+        ContextHelper.executeInContext(closure, context)
+
+        Node node = new NodeBuilder().'org.biouno.unochoice.ChoiceParameter' {
+            name(paramName)
+            description(context.description ?: '')
+            randomName("choice-parameter-${System.nanoTime()}")
+            visibleItemCount(1)
+            choiceType("PT_${context.choiceType}")
+            filterable(context.filterable)
+        }
+        if (context.script) {
+            node.children().add(context.script)
+        }
+        buildParameterNodes[paramName] = node
     }
 }

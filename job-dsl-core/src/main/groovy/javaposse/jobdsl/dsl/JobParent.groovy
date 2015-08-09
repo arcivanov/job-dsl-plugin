@@ -1,9 +1,5 @@
 package javaposse.jobdsl.dsl
 
-import com.google.common.base.Preconditions
-import com.google.common.base.Strings
-import com.google.common.collect.Sets
-import hudson.util.VersionNumber
 import javaposse.jobdsl.dsl.jobs.BuildFlowJob
 import javaposse.jobdsl.dsl.jobs.FreeStyleJob
 import javaposse.jobdsl.dsl.jobs.MatrixJob
@@ -18,12 +14,15 @@ import javaposse.jobdsl.dsl.views.ListView
 import javaposse.jobdsl.dsl.views.NestedView
 import javaposse.jobdsl.dsl.views.SectionedView
 
+import static javaposse.jobdsl.dsl.Preconditions.checkNotNull
+import static javaposse.jobdsl.dsl.Preconditions.checkNotNullOrEmpty
+
 abstract class JobParent extends Script implements DslFactory {
     JobManagement jm
-    Set<Item> referencedJobs = Sets.newLinkedHashSet()
-    Set<View> referencedViews = Sets.newLinkedHashSet()
-    Set<ConfigFile> referencedConfigFiles = Sets.newLinkedHashSet()
-    Set<UserContent> referencedUserContents = Sets.newLinkedHashSet()
+    Set<Item> referencedJobs = new LinkedHashSet<>()
+    Set<View> referencedViews = new LinkedHashSet<>()
+    Set<ConfigFile> referencedConfigFiles = new LinkedHashSet<>()
+    Set<UserContent> referencedUserContents = new LinkedHashSet<>()
     List<String> queueToBuild = []
 
     /**
@@ -55,6 +54,7 @@ abstract class JobParent extends Script implements DslFactory {
      * @since 1.30
      */
     @Override
+    @RequiresPlugin(id = 'matrix-project')
     MatrixJob matrixJob(String name, @DslContext(MatrixJob) Closure closure = null) {
         processJob(name, MatrixJob, closure)
     }
@@ -65,10 +65,6 @@ abstract class JobParent extends Script implements DslFactory {
     @Override
     @RequiresPlugin(id = 'maven-plugin')
     MavenJob mavenJob(String name, @DslContext(MavenJob) Closure closure = null) {
-        if (jm.getPluginVersion('maven-plugin')?.isOlderThan(new VersionNumber('2.3'))) {
-            jm.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
-        }
-
         processJob(name, MavenJob, closure)
     }
 
@@ -78,6 +74,8 @@ abstract class JobParent extends Script implements DslFactory {
     @Override
     @RequiresPlugin(id = 'jenkins-multijob-plugin')
     MultiJob multiJob(String name, @DslContext(MultiJob) Closure closure = null) {
+        jm.logPluginDeprecationWarning('jenkins-multijob-plugin', '1.16')
+
         processJob(name, MultiJob, closure)
     }
 
@@ -92,7 +90,7 @@ abstract class JobParent extends Script implements DslFactory {
 
     // this method cannot be private due to http://jira.codehaus.org/browse/GROOVY-6263
     protected <T extends Job> T processJob(String name, Class<T> jobClass, Closure closure) {
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+        checkNotNullOrEmpty(name, 'name must be specified')
 
         T job = jobClass.newInstance(jm)
         job.name = name
@@ -111,8 +109,8 @@ abstract class JobParent extends Script implements DslFactory {
         Object typeArg = arguments['type'] ?: JobType.Freeform
         JobType jobType = (typeArg instanceof JobType) ? typeArg : JobType.find(typeArg)
 
-        if (jobType == JobType.Maven && jm.getPluginVersion('maven-plugin')?.isOlderThan(new VersionNumber('2.3'))) {
-            jm.logDeprecationWarning('support for Maven project plugin versions older than 2.3')
+        if (jobType == JobType.Multijob) {
+            jm.logPluginDeprecationWarning('jenkins-multijob-plugin', '1.16')
         }
 
         Job job = jobType.jobClass.newInstance(jm)
@@ -185,7 +183,7 @@ abstract class JobParent extends Script implements DslFactory {
 
     // this method cannot be private due to http://jira.codehaus.org/browse/GROOVY-6263
     protected <T extends View> T processView(String name, Class<T> viewClass, Closure closure) {
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+        checkNotNullOrEmpty(name, 'name must be specified')
 
         T view = viewClass.newInstance(jm)
         view.name = name
@@ -233,7 +231,7 @@ abstract class JobParent extends Script implements DslFactory {
     @Override
     @RequiresPlugin(id = 'cloudbees-folder')
     Folder folder(String name, @DslContext(Folder) Closure closure = null) {
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+        checkNotNullOrEmpty(name, 'name must be specified')
 
         Folder folder = new Folder(jm)
         folder.name = name
@@ -279,7 +277,7 @@ abstract class JobParent extends Script implements DslFactory {
 
     // this method cannot be private due to http://jira.codehaus.org/browse/GROOVY-6263
     protected ConfigFile processConfigFile(String name, ConfigFileType configFileType, Closure closure) {
-        Preconditions.checkArgument(!Strings.isNullOrEmpty(name), 'name must be specified')
+        checkNotNullOrEmpty(name, 'name must be specified')
 
         ConfigFile configFile = new ConfigFile(configFileType, jm)
         configFile.name = name
@@ -308,7 +306,8 @@ abstract class JobParent extends Script implements DslFactory {
      */
     @Override
     void queue(Job job) {
-        Preconditions.checkArgument(job.name as Boolean)
+        checkNotNull(job, 'job must not be null')
+        checkNotNullOrEmpty(job.name, 'job name must not be null or empty')
         queueToBuild << job.name
     }
 
@@ -317,7 +316,7 @@ abstract class JobParent extends Script implements DslFactory {
      */
     @Override
     InputStream streamFileFromWorkspace(String filePath) {
-        Preconditions.checkArgument(filePath as Boolean)
+        checkNotNullOrEmpty(filePath, 'filePath must not be null or empty')
         jm.streamFileInWorkspace(filePath)
     }
 
@@ -326,7 +325,7 @@ abstract class JobParent extends Script implements DslFactory {
      */
     @Override
     String readFileFromWorkspace(String filePath) {
-        Preconditions.checkArgument(filePath as Boolean)
+        checkNotNullOrEmpty(filePath, 'filePath must not be null or empty')
         jm.readFileInWorkspace(filePath)
     }
 
@@ -335,8 +334,8 @@ abstract class JobParent extends Script implements DslFactory {
      */
     @Override
     String readFileFromWorkspace(String jobName, String filePath) {
-        Preconditions.checkArgument(jobName as Boolean)
-        Preconditions.checkArgument(filePath as Boolean)
+        checkNotNullOrEmpty(jobName, 'jobName must not be null or empty')
+        checkNotNullOrEmpty(filePath, 'filePath must not be null or empty')
         jm.readFileInWorkspace(jobName, filePath)
     }
 }

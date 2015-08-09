@@ -1,6 +1,7 @@
 package javaposse.jobdsl.dsl.jobs
 
 import javaposse.jobdsl.dsl.ConfigFileType
+import javaposse.jobdsl.dsl.DslScriptException
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation
 import javaposse.jobdsl.dsl.helpers.common.MavenContext
@@ -9,6 +10,14 @@ import spock.lang.Specification
 class MavenJobSpec extends Specification {
     private final JobManagement jobManagement = Mock(JobManagement)
     private final MavenJob job = new MavenJob(jobManagement)
+
+    def 'deprecation warning'() {
+        when:
+        new MavenJob(jobManagement)
+
+        then:
+        1 * jobManagement.logPluginDeprecationWarning('maven-plugin', '2.3')
+    }
 
     def 'construct simple Maven job and generate xml from it'() {
         when:
@@ -57,15 +66,6 @@ class MavenJobSpec extends Specification {
         job.node.mavenOpts[0].value() == '-Xms256m -Xmx512m'
     }
 
-    def 'perModuleEmail constructs xml'() {
-        when:
-        job.perModuleEmail(false)
-
-        then:
-        job.node.perModuleEmail.size() == 1
-        job.node.perModuleEmail[0].value() == false
-    }
-
     def 'archivingDisabled constructs xml'() {
         when:
         job.archivingDisabled(true)
@@ -89,7 +89,7 @@ class MavenJobSpec extends Specification {
         job.localRepository((MavenContext.LocalRepositoryLocation) null)
 
         then:
-        thrown(NullPointerException)
+        thrown(DslScriptException)
     }
 
     def 'localRepository constructs xml for LocalToExecutor'() {
@@ -113,7 +113,7 @@ class MavenJobSpec extends Specification {
         job.localRepository((LocalRepositoryLocation) null)
 
         then:
-        thrown(NullPointerException)
+        thrown(DslScriptException)
     }
 
     def 'localRepository constructs xml for LOCAL_TO_EXECUTOR'() {
@@ -186,7 +186,7 @@ class MavenJobSpec extends Specification {
         }
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
     }
 
     def 'mavenInstallation constructs xml'() {
@@ -206,7 +206,7 @@ class MavenJobSpec extends Specification {
         job.providedSettings(settingsName)
 
         then:
-        Exception e = thrown(NullPointerException)
+        Exception e = thrown(DslScriptException)
         e.message.contains(settingsName)
     }
 

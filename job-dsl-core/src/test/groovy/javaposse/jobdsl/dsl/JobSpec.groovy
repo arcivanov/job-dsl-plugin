@@ -226,9 +226,7 @@ class JobSpec extends Specification {
             permission[1].text() == 'hudson.model.Item.Configure:jack'
         }
         1 * jobManagement.requirePlugin('matrix-auth')
-        1 * jobManagement.logDeprecationWarning(
-                'support for Matrix Authorization Strategy plugin versions older than 1.2'
-        )
+        1 * jobManagement.logPluginDeprecationWarning('matrix-auth', '1.2')
     }
 
     def 'call parameters via helper'() {
@@ -278,7 +276,7 @@ class JobSpec extends Specification {
         }
 
         then:
-        thrown(IllegalStateException)
+        thrown(DslScriptException)
     }
 
     def 'call wrappers'() {
@@ -590,6 +588,29 @@ class JobSpec extends Specification {
         1 * jobManagement.requirePlugin('lockable-resources')
     }
 
+    def 'compress build log'() {
+        when:
+        job.compressBuildLog()
+
+        then:
+        with(job.node.properties[0].'org.jenkinsci.plugins.compressbuildlog.BuildLogCompressor'[0]) {
+            children().size() == 0
+        }
+        1 * jobManagement.requireMinimumPluginVersion('compress-buildlog', '1.0')
+    }
+
+    def 'heavy job weight'() {
+        when:
+        job.weight(42)
+
+        then:
+        with(job.node.properties[0].'hudson.plugins.heavy__job.HeavyJobProperty'[0]) {
+            children().size() == 1
+            weight[0].value() == 42
+        }
+        1 * jobManagement.requireMinimumPluginVersion('heavy-job', '1.1')
+    }
+
     def 'log rotate xml'() {
         when:
         job.logRotator(14, 50)
@@ -627,16 +648,105 @@ class JobSpec extends Specification {
         job.node.logRotator[0].artifactNumToKeep[0].value() == -1
     }
 
-    def 'build blocker xml'() {
+    def 'build blocker'() {
         when:
         job.blockOn('MyProject')
 
         then:
         with(job.node.properties[0].'hudson.plugins.buildblocker.BuildBlockerProperty'[0]) {
-            useBuildBlocker[0].value() == 'true'
+            children().size() == 4
+            useBuildBlocker[0].value() == true
+            blockingJobs[0].value() == 'MyProject'
+            blockLevel[0].value() == 'NODE'
+            scanQueueFor[0].value() == 'DISABLED'
+        }
+        1 * jobManagement.requirePlugin('build-blocker-plugin')
+        1 * jobManagement.logPluginDeprecationWarning('build-blocker-plugin', '1.7.1')
+    }
+
+    def 'build blocker with all options'() {
+        when:
+        job.blockOn('MyProject2') {
+            blockLevel(level)
+            scanQueueFor(queue)
+        }
+
+        then:
+        with(job.node.properties[0].'hudson.plugins.buildblocker.BuildBlockerProperty'[0]) {
+            children().size() == 4
+            useBuildBlocker[0].value() == true
+            blockingJobs[0].value() == 'MyProject2'
+            blockLevel[0].value() == level
+            scanQueueFor[0].value() == queue
+        }
+        1 * jobManagement.requirePlugin('build-blocker-plugin')
+        2 * jobManagement.requireMinimumPluginVersion('build-blocker-plugin', '1.7.1')
+        1 * jobManagement.logPluginDeprecationWarning('build-blocker-plugin', '1.7.1')
+
+        where:
+        level    | queue
+        'GLOBAL' | 'ALL'
+        'NODE'   | 'ALL'
+        'GLOBAL' | 'DISABLED'
+        'NODE'   | 'DISABLED'
+        'GLOBAL' | 'BUILDABLE'
+        'NODE'   | 'BUILDABLE'
+    }
+
+    def 'build blocker with invalid options'() {
+        when:
+        job.blockOn('MyProject2') {
+            blockLevel(level)
+            scanQueueFor(queue)
+        }
+
+        then:
+        thrown(DslScriptException)
+
+        where:
+        level    | queue
+        'GLOBAL' | ''
+        'NODE'   | 'FOO'
+        'GLOBAL' | null
+        ''       | 'DISABLED'
+        'FOO'    | 'BUILDABLE'
+        null     | 'BUILDABLE'
+    }
+
+    def 'build blocker with iterator'() {
+        when:
+        job.blockOn(['MyProject', 'MyProject2', 'MyProject3']) {
+            blockLevel('GLOBAL')
+            scanQueueFor('ALL')
+        }
+
+        then:
+        with(job.node.properties[0].'hudson.plugins.buildblocker.BuildBlockerProperty'[0]) {
+            children().size() == 4
+            useBuildBlocker[0].value() == true
+            blockingJobs[0].value() == 'MyProject\nMyProject2\nMyProject3'
+            blockLevel[0].value() == 'GLOBAL'
+            scanQueueFor[0].value() == 'ALL'
+        }
+        1 * jobManagement.requirePlugin('build-blocker-plugin')
+        1 * jobManagement.logPluginDeprecationWarning('build-blocker-plugin', '1.7.1')
+    }
+
+    def 'build blocker with older plugin version'() {
+        setup:
+        jobManagement.getPluginVersion('build-blocker-plugin') >> new VersionNumber('1.7.0')
+
+        when:
+        job.blockOn('MyProject')
+
+        then:
+        with(job.node.properties[0].'hudson.plugins.buildblocker.BuildBlockerProperty'[0]) {
+            children().size() == 2
+            useBuildBlocker[0].value() == true
             blockingJobs[0].value() == 'MyProject'
         }
         1 * jobManagement.requirePlugin('build-blocker-plugin')
+        1 * jobManagement.logPluginDeprecationWarning('build-blocker-plugin', '1.7.1')
     }
 
     def 'can run jdk'() {
@@ -889,7 +999,7 @@ class JobSpec extends Specification {
         1 * jobManagement.requirePlugin('notification')
 
         then:
-        thrown(IllegalArgumentException)
+        thrown(DslScriptException)
 
         where:
         url        | protocol | format  | event
