@@ -10,12 +10,12 @@ import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
 import javaposse.jobdsl.dsl.helpers.AbstractExtensibleContext
-import javaposse.jobdsl.dsl.helpers.common.BuildPipelineContext
-import javaposse.jobdsl.dsl.helpers.common.DownstreamContext
 import javaposse.jobdsl.dsl.helpers.common.PublishOverSshContext
 
 import static javaposse.jobdsl.dsl.Preconditions.checkArgument
 import static javaposse.jobdsl.dsl.Preconditions.checkNotNullOrEmpty
+import static javaposse.jobdsl.dsl.helpers.common.Threshold.THRESHOLD_COLOR_MAP
+import static javaposse.jobdsl.dsl.helpers.common.Threshold.THRESHOLD_ORDINAL_MAP
 
 class PublisherContext extends AbstractExtensibleContext {
     List<Node> publisherNodes = []
@@ -111,15 +111,9 @@ class PublisherContext extends AbstractExtensibleContext {
             }
             latestOnly(artifactsContext.latestOnly)
             allowEmptyArchive(artifactsContext.allowEmpty)
-            if (!jobManagement.jenkinsVersion.isOlderThan(new VersionNumber('1.575'))) {
-                defaultExcludes(artifactsContext.defaultExcludes)
-            }
-            if (!jobManagement.jenkinsVersion.isOlderThan(new VersionNumber('1.571'))) {
-                delegate.fingerprint(artifactsContext.fingerprint)
-            }
-            if (!jobManagement.jenkinsVersion.isOlderThan(new VersionNumber('1.567'))) {
-                onlyIfSuccessful(artifactsContext.onlyIfSuccessful)
-            }
+            defaultExcludes(artifactsContext.defaultExcludes)
+            delegate.fingerprint(artifactsContext.fingerprint)
+            onlyIfSuccessful(artifactsContext.onlyIfSuccessful)
         }
     }
 
@@ -474,16 +468,16 @@ class PublisherContext extends AbstractExtensibleContext {
      */
     void downstream(String projectName, String thresholdName = 'SUCCESS') {
         checkArgument(
-                DownstreamContext.THRESHOLD_COLOR_MAP.containsKey(thresholdName),
-                "thresholdName must be one of these values ${DownstreamContext.THRESHOLD_COLOR_MAP.keySet().join(',')}"
+                THRESHOLD_COLOR_MAP.containsKey(thresholdName),
+                "thresholdName must be one of these values ${THRESHOLD_COLOR_MAP.keySet().join(',')}"
         )
 
         publisherNodes << new NodeBuilder().'hudson.tasks.BuildTrigger' {
             childProjects projectName
             threshold {
                 delegate.createNode('name', thresholdName)
-                ordinal DownstreamContext.THRESHOLD_ORDINAL_MAP[thresholdName]
-                color DownstreamContext.THRESHOLD_COLOR_MAP[thresholdName]
+                ordinal THRESHOLD_ORDINAL_MAP[thresholdName]
+                color THRESHOLD_COLOR_MAP[thresholdName]
             }
         }
     }
@@ -493,10 +487,14 @@ class PublisherContext extends AbstractExtensibleContext {
      */
     @RequiresPlugin(id = 'parameterized-trigger')
     void downstreamParameterized(@DslContext(DownstreamContext) Closure downstreamClosure) {
+        jobManagement.logPluginDeprecationWarning('parameterized-trigger', '2.25')
+
         DownstreamContext downstreamContext = new DownstreamContext(jobManagement)
         ContextHelper.executeInContext(downstreamClosure, downstreamContext)
 
-        publisherNodes << downstreamContext.createDownstreamNode(false)
+        publisherNodes << new NodeBuilder().'hudson.plugins.parameterizedtrigger.BuildTrigger' {
+            configs(downstreamContext.configs)
+        }
     }
 
     void violations(@DslContext(ViolationsContext) Closure violationsClosure = null) {

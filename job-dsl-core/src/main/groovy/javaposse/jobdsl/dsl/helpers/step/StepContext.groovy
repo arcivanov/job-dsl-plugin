@@ -9,7 +9,6 @@ import javaposse.jobdsl.dsl.Preconditions
 import javaposse.jobdsl.dsl.RequiresPlugin
 import javaposse.jobdsl.dsl.WithXmlAction
 import javaposse.jobdsl.dsl.helpers.AbstractExtensibleContext
-import javaposse.jobdsl.dsl.helpers.common.DownstreamContext
 import javaposse.jobdsl.dsl.helpers.common.PublishOverSshContext
 
 import static javaposse.jobdsl.dsl.helpers.LocalRepositoryLocation.LOCAL_TO_WORKSPACE
@@ -483,10 +482,14 @@ class StepContext extends AbstractExtensibleContext {
      */
     @RequiresPlugin(id = 'parameterized-trigger')
     void downstreamParameterized(@DslContext(DownstreamContext) Closure downstreamClosure) {
+        jobManagement.logPluginDeprecationWarning('parameterized-trigger', '2.25')
+
         DownstreamContext downstreamContext = new DownstreamContext(jobManagement)
         ContextHelper.executeInContext(downstreamClosure, downstreamContext)
 
-        stepNodes << downstreamContext.createDownstreamNode(true)
+        stepNodes << new NodeBuilder().'hudson.plugins.parameterizedtrigger.TriggerBuilder' {
+          configs(downstreamContext.configs)
+        }
     }
 
     /**

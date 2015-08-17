@@ -5,7 +5,10 @@ import javaposse.jobdsl.dsl.ContextHelper
 import javaposse.jobdsl.dsl.DslContext
 import javaposse.jobdsl.dsl.JobManagement
 import javaposse.jobdsl.dsl.RequiresPlugin
+import javaposse.jobdsl.dsl.helpers.parameter.AbstractActiveChoiceContext
 import javaposse.jobdsl.dsl.helpers.parameter.ActiveChoiceContext
+import javaposse.jobdsl.dsl.helpers.parameter.ActiveChoiceReactiveContext
+import javaposse.jobdsl.dsl.helpers.parameter.ActiveChoiceReactiveReferenceContext
 
 import static java.util.UUID.randomUUID
 import static javaposse.jobdsl.dsl.Preconditions.checkArgument
@@ -205,23 +208,66 @@ class BuildParametersContext extends AbstractContext {
      */
     @RequiresPlugin(id = 'uno-choice', minimumVersion = '1.2')
     void activeChoiceParam(String paramName, @DslContext(ActiveChoiceContext) Closure closure) {
-        checkNotNull(paramName, 'paramName cannot be null')
-        checkArgument(!buildParameterNodes.containsKey(paramName), 'parameter $paramName already defined')
-
         ActiveChoiceContext context = new ActiveChoiceContext()
         ContextHelper.executeInContext(closure, context)
 
-        Node node = new NodeBuilder().'org.biouno.unochoice.ChoiceParameter' {
+        buildParameterNodes[paramName] = createActiveChoiceNode(
+                'org.biouno.unochoice.ChoiceParameter', paramName, context
+        )
+    }
+
+    /**
+     * @since 1.38
+     */
+    @RequiresPlugin(id = 'uno-choice', minimumVersion = '1.2')
+    void activeChoiceReactiveParam(String paramName,
+                                   @DslContext(ActiveChoiceReactiveContext) Closure closure = null) {
+        ActiveChoiceReactiveContext context = new ActiveChoiceReactiveContext()
+        ContextHelper.executeInContext(closure, context)
+
+        Node node = createActiveChoiceNode('org.biouno.unochoice.CascadeChoiceParameter', paramName, context)
+        node.appendNode('referencedParameters', context.referencedParameters.join(', '))
+
+        buildParameterNodes[paramName] = node
+    }
+
+    /**
+     * @since 1.38
+     */
+    @RequiresPlugin(id = 'uno-choice', minimumVersion = '1.2')
+    void activeChoiceReactiveReferenceParam(String paramName,
+                                            @DslContext(ActiveChoiceReactiveReferenceContext) Closure closure = null) {
+        ActiveChoiceReactiveReferenceContext context = new ActiveChoiceReactiveReferenceContext()
+        ContextHelper.executeInContext(closure, context)
+
+        Node node = createAbstractActiveChoiceNode('org.biouno.unochoice.DynamicReferenceParameter', paramName, context)
+        node.appendNode('referencedParameters', context.referencedParameters.join(', '))
+        node.appendNode('choiceType', "ET_${context.choiceType}")
+        node.appendNode('omitValueField', context.omitValueField)
+
+        buildParameterNodes[paramName] = node
+    }
+
+    Node createActiveChoiceNode(String type, String paramName, ActiveChoiceContext context) {
+        Node node = createAbstractActiveChoiceNode(type, paramName, context)
+        node.appendNode('filterable', context.filterable)
+        node.appendNode('choiceType', "PT_${context.choiceType}")
+        node
+    }
+
+    Node createAbstractActiveChoiceNode(String type, String paramName, AbstractActiveChoiceContext context) {
+        checkNotNull(paramName, 'paramName cannot be null')
+        checkArgument(!buildParameterNodes.containsKey(paramName), "parameter ${paramName} already defined")
+
+        Node node = new NodeBuilder()."${type}" {
             name(paramName)
             description(context.description ?: '')
             randomName("choice-parameter-${System.nanoTime()}")
             visibleItemCount(1)
-            choiceType("PT_${context.choiceType}")
-            filterable(context.filterable)
         }
         if (context.script) {
             node.children().add(context.script)
         }
-        buildParameterNodes[paramName] = node
+        node
     }
 }

@@ -66,6 +66,10 @@ freeStyleJob(String name) { // since 1.30
         textParam(String parameterName, String defaultValue = null,
                   String description = null)
         activeChoiceParam(String paramName, Closure closure) // since 1.36
+        activeChoiceReactiveParam(String paramName,
+                                  Closure closure) // since 1.38
+        activeChoiceReactiveReferenceParam(String paramName,
+                                           Closure closure) // since 1.38
     }
     scm {
         baseClearCase(Closure closure) // since 1.24
@@ -313,6 +317,26 @@ buildFlowJob(String name) { // since 1.30
 }
 
 job(type: BuildFlow, Closure closure) // deprecated since 1.30
+```
+
+## Ivy Job
+
+```groovy
+ivyJob(String name) { // since 1.38
+    // includes all options from freeStyleJob
+
+    ivyFilePattern(String ivyFilePattern)
+    ivyFileExcludesPattern(String ivyFileExcludesPattern)
+    ivyBranch(String ivyBranch)
+    relativePathToDescriptorFromModuleRoot(String relativePathToDescriptorFromModuleRoot)
+    ivySettingsFile(String ivySettingsFile)
+    ivySettingsPropertyFiles(String ivySettingsPropertyFiles)
+    perModuleBuild(boolean perModuleBuild = true)
+    incrementalBuild(boolean incrementalBuild = true)
+    ivyBuilder {
+        ant(Closure antClosure = null)
+    }
+}
 ```
 
 ## Matrix Job
@@ -839,10 +863,189 @@ buildFlowJob('example-3') {
 
 Since 1.21.
 
+# Ivy
+
+The `ivyFilePattern`, `ivyFileExcludesPattern`, `ivyBranch`, `relativePathToDescriptorFromModuleRoot`,
+ `ivySettingsFile`, `ivySettingsPropertyFiles`, `perModuleBuild`, `incrementalBuild`, and `ivyBuilder`
+ methods can only be used in jobs created with the `ivyJob` method.
+
+Requires the [Ivy Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Ivy+Plugin).
+
+(since 1.38)
+
+### Ivy File Pattern
+
+```groovy
+ivyJob(String name) {
+    ivyFilePattern(String ivyFilePattern)
+}
+```
+
+The pattern to use to search for ivy module descriptor files (usually named `ivy.xml`) in this project.
+Specified using ant-include pattern syntax. Default if not specified is `**/ivy.xml`.
+
+### Ivy File Excludes Pattern
+
+```groovy
+ivyJob(String name) {
+    ivyFileExcludesPattern(String ivyFileExcludesPattern)
+}
+```
+
+Allows modules to be excluded from the build. Specified using ant-include pattern syntax.  At the moment, this
+only effects the build if the `aggregatorStyleBuild` is set to false.
+
+```groovy
+ivyJob('example') {
+    ivyFileExcludesPattern('moduleX/**,moduleZ/**')
+}
+```
+
+### Ivy Branch
+
+```groovy
+ivyJob(String name) {
+    ivyBranch(String ivyBranch)
+}
+```
+
+Default Ivy branch name for this module/set of modules. This is used when calculating upstream/downstream build
+triggers. Only dependencies with an Ivy branch matching this one will be added as upstream/downstream builds.
+
+This only needs to be specified if you use Ivy branches.
+
+```groovy
+ivyJob('example') {
+    ivyBranch('myproduct/1.2')
+}
+```
+
+### Relative Path to Descriptor from Module Root
+
+```groovy
+ivyJob(String name) {
+    relativePathToDescriptorFromModuleRoot(String relativePathToDescriptorFromModuleRoot)
+}
+```
+
+The relative path to the module descriptor file from the root of each module. Defaults to `ivy.xml` if not specified
+(assumes your `ivy.xml` files are located directly in the root of each module).
+
+### Ivy Settings File
+
+```groovy
+ivyJob(String name) {
+    ivySettingsFile(String ivySettingsFile)
+}
+```
+
+Custom Ivy settings file to be used when parsing Ivy module descriptors. Specified as a relative path from the
+workspace root.
+
+This only needs to be specified if you use custom conflict managers and latest strategies in your Ivy files that
+can't be parsed otherwise.
+
+```groovy
+ivyJob('example') {
+    ivySettingsFile('build/ivy/ivysettings.xml')
+}
+```
+
+### Ivy Settings Property Files
+
+```groovy
+ivyJob(String name) {
+    ivySettingsPropertyFiles(String ivySettingsPropertyFiles)
+}
+```
+
+Property files that need to be loaded before parsing the Ivy settings file and Ivy module descriptors.
+Specified as comma-delimited list of relative paths from the workspace root or absolute file paths.
+
+This only needs to be specified if you use `${property}` references in your Ivy settings file or in your
+Ivy module descriptors that normally get loaded by your build scripts prior to initialising Ivy.
+
+```groovy
+ivyJob('example') {
+    ivySettingsPropertyFiles('branch.properties,deps.properties')
+}
+```
+
+### Per Module Build
+
+```groovy
+ivyJob(String name) {
+    perModuleBuild(boolean perModuleBuild = true)
+}
+```
+
+Enables per-module builds where each module gets built as a separate sub-project. Per-module builds are
+not enabled by default.
+
+### Incremental Build
+
+```groovy
+ivyJob(String name) {
+    incrementalBuild(boolean incrementalBuild = true)
+}
+```
+
+Enables incremental builds where only modules which have changes or which failed or were unstable in the
+previous build will be triggered to build. Incremental builds are not enabled by default.
+
+### Ivy Builder
+
+```groovy
+ivyJob(String name) {
+    ivyBuilder(Closure ivyBuilderClosure)
+}
+```
+
+The Ivy builder type to use for building the modules. Only the Ant builder is supported natively. Support for other
+builders, like NAnt for example, could be contributed to this extensible type.
+
+Only one builder may be specified.
+
+### Ant Ivy Builder
+
+```groovy
+ivyJob(String name) {
+    ivyBuilder {
+        ant {
+            target(String targetName)
+            targets(Iterable<String> targets)
+            prop(Object key, Object value)
+            props(Map<String, String> map)
+            buildFile(String buildFile)
+            javaOpt(String opt)
+            javaOpts(Iterable<String> opts)
+            antInstallation(String antInstallationName)
+        }
+    }
+}
+```
+
+Uses And for building the modules. Requires the [Ant Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Ant+Plugin).
+
+```groovy
+ivyJob('example') {
+    ivyBuilder {
+        ant {
+            target('clean')
+            targets(['test', 'publish'])
+            buildFile('build.xml')
+            antInstallation('Ant 1.9')
+            prop('key', 'value')
+            javaOpt('-Xmx=1G')
+        }
+    }
+}
+```
+
 # Maven
 
-The `rootPOM`, `goals`, `mavenOpts`, `mavenInstallation`, `archivingDisabled`, `runHeadless`,
- `preBuildSteps`, `postBuildSteps` and `providedSettings` methods can only be used in jobs with type `Maven`.
+The `rootPOM`, `goals`, `mavenOpts`, `mavenInstallation`, `archivingDisabled`, `runHeadless`, `preBuildSteps`,
+`postBuildSteps` and `providedSettings` methods can only be used in jobs created with the `mavenJob` method.
 
 ### Root POM
 
@@ -1633,6 +1836,14 @@ job {
             autoCloseFailedPullRequests(boolean value = true) // defaults to false
             commentFilePath(String commentFilePath)           // since 1.31
             allowMembersOfWhitelistedOrgsAsAdmin(boolean value = true) // since 1.35
+            extensions { // since 1.38
+                commitStatus {
+                    context(String context)
+                    triggeredStatus(String triggeredStatus)
+                    startedStatus(String startedStatus)
+                    completedStatus(String buildResult, String message)
+                }
+            }
         }
     }
 }
@@ -1642,6 +1853,9 @@ Builds pull requests from GitHub and will report the results directly to the pul
 [GitHub pull request builder plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin).
 
 The pull request builder plugin requires a special Git SCM configuration, see the plugin documentation for details.
+
+`completedStatus` can be called multiple times to set messages for different build results. Valid values for
+`buildResult` are `'SUCCESS'`, `'FAILURE'`, and `'ERROR'`.
 
 ```groovy
 job('example') {
@@ -1666,6 +1880,14 @@ job('example') {
             permitAll()
             autoCloseFailedPullRequests()
             allowMembersOfWhitelistedOrgsAsAdmin()
+            extensions {
+                commitStatus {
+                    context('deploy to staging site')
+                    startedStatus('deploying to staging site...')
+                    completedStatus('SUCCESS', 'All is well')
+                    completedStatus('FAILURE', 'Something went wrong. Investigate!')
+                }
+            }
         }
     }
 }
@@ -2427,10 +2649,8 @@ mavenJob {
 }
 ```
 
-Allows to perform a release build using the maven-release-plugin. Only available for jobs with type `Maven`. Requires
-the [M2 Release Plugin](https://wiki.jenkins-ci.org/display/JENKINS/M2+Release+Plugin).
-
-Example:
+Allows to perform a release build using the maven-release-plugin. Only available for jobs created with the `mavenJob`
+method. Requires the [M2 Release Plugin](https://wiki.jenkins-ci.org/display/JENKINS/M2+Release+Plugin).
 
 ```groovy
 mavenJob('example') {
@@ -3323,18 +3543,30 @@ multiJob {
             job(String jobName, boolean currentJobParameters = true, boolean exposedScm = true) {
                 currentJobParameters(boolean currentJobParameters = true)
                 exposedScm(boolean exposedScm = true)
-                boolParam(String paramName, boolean defaultValue = false)
-                fileParam(String propertyFile, boolean failTriggerOnMissing = false)
-                sameNode(boolean nodeParam = true)
-                matrixParam(String filter)
-                subversionRevision(boolean includeUpstreamParameters = false)
-                gitRevision(boolean combineQueuedCommits = false)
-                prop(Object key, Object value)
-                props(Map<String, String> map)
+                boolParam(String paramName, boolean defaultValue = false) // deprecated
+                fileParam(String propertyFile, boolean failTriggerOnMissing = false) // deprecated
+                sameNode(boolean nodeParam = true) // deprecated
+                matrixParam(String filter) // deprecated
+                subversionRevision(boolean includeUpstreamParameters = false) // deprecated
+                gitRevision(boolean combineQueuedCommits = false) // deprecated
+                prop(Object key, Object value) // deprecated
+                props(Map<String, String> map) // deprecated
                 disableJob(boolean disableJob = true) // since 1.25
                 abortAllJobs(boolean abortAllJobs = true) //since 1.37
                 killPhaseCondition(String killPhaseCondition) // since 1.25
-                nodeLabel(String paramName, String nodeLabel) // since 1.26
+                nodeLabel(String paramName, String nodeLabel) // since 1.26, deprecated
+                parameters { // since 1.38
+                    booleanParam(String name, boolean defaultValue = false)
+                    sameNode()
+                    currentBuild()
+                    nodeLabel(String paramName, String nodeLabel)
+                    propertiesFile(String file, boolean failOnMissing = false)
+                    gitRevision(boolean combineQueuedCommits = false)
+                    predefinedProp(String key, String value)
+                    predefinedProps(Map<String, String> predefinedPropsMap)
+                    matrixSubset(String groovyFilter)
+                    subversionRevision(boolean includeUpstreamParameters = false)
+                }
                 configure(Closure configClosure) // since 1.30
             }
         }
@@ -3358,7 +3590,9 @@ multiJob('example') {
         phase() {
             phaseName 'Second'
             job('JobZ') {
-                fileParam('my1.properties')
+                parameters {
+                    propertiesFile('my1.properties')
+                }
             }
         }
         phase('Third') {
@@ -3368,14 +3602,16 @@ multiJob('example') {
         }
         phase('Fourth') {
             job('JobD', false, true) {
-                boolParam('cParam', true)
-                fileParam('my.properties')
-                sameNode()
-                matrixParam('it.name=="hello"')
-                subversionRevision()
-                gitRevision()
-                prop('prop1', 'value1')
-                nodeLabel('lParam', 'my_nodes')
+                parameters {
+                    booleanParam('cParam', true)
+                    propertiesFile('my.properties')
+                    sameNode()
+                    matrixSubset('it.name=="hello"')
+                    subversionRevision()
+                    gitRevision()
+                    predefinedProp('prop1', 'value1')
+                    nodeLabel('lParam', 'my_nodes')
+                }
                 configure { phaseJobConfig ->
                   phaseJobConfig / enableCondition << 'true'
                   phaseJobConfig / condition << '${RUN_JOB} == "true"'
@@ -3554,30 +3790,78 @@ job {
 job {
     steps {
         downstreamParameterized { // since 1.20
-            trigger(String projects, String condition,
-                    boolean triggerWithNoParameters,
-                    Map<String, String> blockingThresholds) {
-                currentBuild()
-                propertiesFile(String file, boolean failOnMissing = false)
-                gitRevision(boolean combineQueuedCommits = false)
-                predefinedProp(String key, String value)
-                predefinedProps(Map<String, String> predefinedPropsMap)
-                predefinedProps(String predefinedProps) // newline separated
-                matrixSubset(String groovyFilter)
-                subversionRevision(boolean includeUpstreamParameters = false)
-                sameNode()
-                nodeLabel(String paramName, String nodeLabel) // since 1.26
+            trigger(String projects) {
+                currentBuild()                                                // deprecated
+                propertiesFile(String file, boolean failOnMissing = false)    // deprecated
+                gitRevision(boolean combineQueuedCommits = false)             // deprecated
+                predefinedProp(String key, String value)                      // deprecated
+                predefinedProps(Map<String, String> predefinedPropsMap)       // deprecated
+                predefinedProps(String predefinedProps)                       // deprecated
+                matrixSubset(String groovyFilter)                             // deprecated
+                subversionRevision(boolean includeUpstreamParameters = false) // deprecated
+                sameNode()                                                    // deprecated
+                nodeLabel(String paramName, String nodeLabel)     // since 1.26, deprecated
+                block { // since 1.38
+                    buildStepFailure(String threshold)
+                    failure(String threshold)
+                    unstable(String threshold)
+                }
+                parameters { // since 1.38
+                    booleanParam(String name, boolean defaultValue = false)
+                    sameNode()
+                    currentBuild()
+                    nodeLabel(String paramName, String nodeLabel)
+                    propertiesFile(String file, boolean failOnMissing = false)
+                    gitRevision(boolean combineQueuedCommits = false)
+                    predefinedProp(String key, String value)
+                    predefinedProps(Map<String, String> predefinedPropsMap)
+                    matrixSubset(String groovyFilter)
+                    subversionRevision(boolean includeUpstreamParameters = false)
+                }
+                parameterFactories { // since 1.38
+                    forMatchingFiles(String filePattern,
+                                     String parameterName,
+                                     String noFilesFoundAction = 'SKIP')
+                }
             }
-            trigger(String projects, Closure downstreamTriggerClosure = null)
             trigger(String projects, String condition,
-                    Closure downstreamTriggerClosure = null)
+                    Closure downstreamTriggerClosure = null)    // deprecated
             trigger(String projects, String condition,
                     boolean triggerWithNoParameters,
-                    Closure downstreamTriggerClosure = null)
+                    Closure downstreamTriggerClosure = null)    // deprecated
+            trigger(String projects, String condition,
+                    boolean triggerWithNoParameters,
+                    Map<String, String> blockingThresholds,
+                    Closure downstreamTriggerClosure = null)    // deprecated
         }
     }
     publishers {
-        downstreamParameterized(Closure downstreamClosure)
+        downstreamParameterized {
+            trigger(String projects) {
+                currentBuild()                                                // deprecated
+                propertiesFile(String file, boolean failOnMissing = false)    // deprecated
+                gitRevision(boolean combineQueuedCommits = false)             // deprecated
+                predefinedProp(String key, String value)                      // deprecated
+                predefinedProps(Map<String, String> predefinedPropsMap)       // deprecated
+                predefinedProps(String predefinedProps)                       // deprecated
+                matrixSubset(String groovyFilter)                             // deprecated
+                subversionRevision(boolean includeUpstreamParameters = false) // deprecated
+                sameNode()                                                    // deprecated
+                nodeLabel(String paramName, String nodeLabel)     // since 1.26, deprecated
+                condition(String condition) // since 1.38
+                triggerWithNoParameters(boolean triggerWithNoParameters = true) // since 1.38
+                parameters(Closure parameterClosure) // since 1.38, see above
+            }
+            trigger(String projects, String condition,
+                    Closure downstreamTriggerClosure = null)    // deprecated
+            trigger(String projects, String condition,
+                    boolean triggerWithNoParameters,
+                    Closure downstreamTriggerClosure = null)    // deprecated
+            trigger(String projects, String condition,
+                    boolean triggerWithNoParameters,
+                    Map<String, String> blockingThresholds,
+                    Closure downstreamTriggerClosure = null)    // deprecated
+        }
     }
 }
 ```
@@ -3593,11 +3877,14 @@ The `condition` argument must be one of these values: `'SUCCESS'` (default), `'U
 `'UNSTABLE_OR_WORSE'`, `'FAILED'` or `'ALWAYS'`. The argument is ignored when configuring a build step, but should be
 set to `'ALWAYS'`.
 
-The `predefinedProp` and `predefinedProps` methods are used to accumulate properties, meaning that they can be called
-multiple times to build a superset of properties.
+The `booleanParam`, `predefinedProp` and `predefinedProps` methods can be used to accumulate properties, meaning that
+they can be called multiple times to build a superset of properties.
 
 The `blockingThresholds` argument can only be used when configuring a build step. Valid keys for the map are
-`buildStepFailure`, `failure` and `unstable`. The values can be set to either `'SUCCESS'`, `'UNSTABLE'`  or `'FAILURE'`.
+`buildStepFailure`, `failure` and `unstable`. The values can be set to either `'never'` (default), `'SUCCESS'`,
+`'UNSTABLE'` or `'FAILURE'`.
+
+Valid values for `noFilesFoundAction` are `'SKIP'`, `'NOPARMS'` and `'FAIL'`.
 
 The `nodeLabel` parameter type requires the
 [NodeLabel Parameter Plugin](https://wiki.jenkins-ci.org/display/JENKINS/NodeLabel+Parameter+Plugin).
@@ -3606,16 +3893,21 @@ The `nodeLabel` parameter type requires the
 job('example-1') {
     steps {
         downstreamParameterized {
-            trigger('Project1, Project2', 'ALWAYS', true,
-                    [buildStepFailure: 'FAILURE',
-                     failure         : 'FAILURE',
-                     unstable        : 'UNSTABLE']) {
-                predefinedProp('key1', 'value1')
-                predefinedProps([key2: 'value2', key3: 'value3'])
-                predefinedProps('key4=value4\nkey5=value5')
+            trigger('Project1, Project2') {
+                block {
+                    buildStepFailure('FAILURE')
+                    failure ('FAILURE')
+                    unstable('UNSTABLE')
+                }
+                parameters {
+                    predefinedProp('key1', 'value1')
+                    predefinedProps([key2: 'value2', key3: 'value3'])
+                }
             }
             trigger('Project2') {
-                currentBuild()
+                parameters {
+                    currentBuild()
+                }
             }
         }
     }
@@ -3624,8 +3916,11 @@ job('example-1') {
 job('example-2') {
     publishers {
         downstreamParameterized {
-            trigger('Project1, Project2', 'UNSTABLE_OR_BETTER') {
-                currentBuild()
+            trigger('Project1, Project2') {
+                condition('UNSTABLE_OR_BETTER')
+                parameters {
+                    currentBuild()
+                }
             }
         }
     }
@@ -5201,14 +5496,16 @@ job {
     publishers {
         buildPipelineTrigger(String downstreamProjectNames) {
             parameters { // since 1.23
+                booleanParam(String name, boolean defaultValue = false) // since 1.38
+                sameNode()
                 currentBuild()
-                propertiesFile(String propFile)
+                propertiesFile(String file, boolean failOnMissing = false)
                 gitRevision(boolean combineQueuedCommits = false)
                 predefinedProp(String key, String value)
                 predefinedProps(Map<String, String> predefinedPropsMap)
-                predefinedProps(String predefinedProps)
+                predefinedProps(String predefinedProps) // deprecated
                 matrixSubset(String groovyFilter)
-                subversionRevision()
+                subversionRevision(boolean includeUpstreamParameters = false)
                 nodeLabel(String paramName, String nodeLabel) // since 1.26
             }
         }
@@ -6067,6 +6364,125 @@ job('example-2') {
 ```
 
 (since 1.36)
+
+### Active Choice Reactive Parameter
+
+```groovy
+job {
+    parameters {
+        activeChoiceReactiveParam(String paramName) {
+            description(String description)
+            filterable(boolean filterable = true)
+            choiceType(String choiceType)
+            groovyScript {
+                script(String script)
+                fallbackScript(String fallbackScript)
+            }
+            scriptlerScript(String scriptId) {
+                parameter(String name, String value)
+            }
+            referencedParameter(String paramName)
+        }
+    }
+}
+```
+
+Defines a Active Choice parameter with groovy script as source of parameter options. Requires the
+[Active Choices Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Active+Choices+Plugin).
+
+Valid values for `choiceType` are `'SINGLE_SELECT'` (default), `'MULTI_SELECT'`, `'CHECKBOX'` and `'RADIO'`.
+
+```groovy
+job('example-1') {
+    parameters {
+        activeChoiceReactiveParam('CHOICE-1') {
+            description('Allows user choose from multiple choices')
+            filterable()
+            choiceType('SINGLE_SELECT')
+            groovyScript {
+                script('["choice1", "choice2"]')
+                fallbackScript('"fallback choice"')
+            }
+            referencedParameter('BOOLEAN-PARAM-1')
+            referencedParameter('BOOLEAN-PARAM-2')
+        }
+    }
+}
+
+job('example-2') {
+    parameters {
+        activeChoiceReactiveParam('CHOICE-1') {
+            scriptlerScript('scriptler-script1.groovy') {
+                parameter('param1', 'value1')
+                parameter('param2', 'value2')
+            }
+            referencedParameter('BOOLEAN-PARAM-1')
+        }
+    }
+}
+```
+
+(since 1.38)
+
+### Active Choice Reactive Reference Parameter
+
+```groovy
+job {
+    parameters {
+        activeChoiceReactiveReferenceParam(String paramName) {
+            description(String description)
+            omitValueField(boolean omitValueField = true)
+            choiceType(String choiceType)
+            groovyScript {
+                script(String script)
+                fallbackScript(String fallbackScript)
+            }
+            scriptlerScript(String scriptId) {
+                parameter(String name, String value)
+            }
+            referencedParameter(String paramName)
+        }
+    }
+}
+```
+
+Defines a Active Choice Reactive Reference parameter with groovy script as source of parameter options. Requires the
+[Active Choices Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Active+Choices+Plugin).
+
+Valid values for `choiceType` are  `'TEXT_BOX'` (default), `'FORMATTED_HTML'`, `'FORMATTED_HIDDEN_HTML'`,
+`'ORDERED_LIST'`, `'UNORDERED_LIST'`.
+
+```groovy
+job('example-1') {
+    parameters {
+        activeChoiceReactiveReferenceParam('CHOICE-1') {
+            description('Allows user choose from multiple choices')
+            omitValueField()
+            choiceType('FORMATTED_HIDDEN_HTML')
+            groovyScript {
+                script('["choice1", "choice2"]')
+                fallbackScript('"fallback choice"')
+            }
+            referencedParameter('BOOLEAN-PARAM-1')
+            referencedParameter('BOOLEAN-PARAM-2')
+        }
+    }
+}
+
+job('example-2') {
+    parameters {
+        activeChoiceReactiveReferenceParam('CHOICE-1') {
+            scriptlerScript('scriptler-script1.groovy') {
+                parameter('param1', 'value1')
+                parameter('param2', 'value2')
+            }
+            referencedParameter('BOOLEAN-PARAM-1')
+        }
+    }
+}
+```
+
+(since 1.38)
 
 ### Label Parameter
 

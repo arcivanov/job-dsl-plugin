@@ -971,4 +971,114 @@ class BuildParametersContextSpec extends Specification {
         }
         1 * jobManagement.requireMinimumPluginVersion('uno-choice', '1.2')
     }
+
+    def 'active choice reactive param without options'() {
+        when:
+        context.activeChoiceReactiveParam('activeChoiceReferenceParam') {
+        }
+
+        then:
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['activeChoiceReferenceParam']) {
+            name() == 'org.biouno.unochoice.CascadeChoiceParameter'
+            children().size() == 7
+            description.text() == ''
+            randomName.text() =~ /choice-parameter-\d+/
+            visibleItemCount.text() == '1'
+            filterable.text() == 'false'
+            choiceType.text() == 'PT_SINGLE_SELECT'
+            script.text() == ''
+            referencedParameters.text() == ''
+        }
+    }
+
+    def 'active choice reactive param with all options and groovy script'() {
+        when:
+        context.activeChoiceReactiveParam('activeChoiceReferenceScriptlerParam') {
+            description('Active choice param test')
+            filterable()
+            choiceType('SINGLE_SELECT')
+            groovyScript {
+                script('x1')
+                fallbackScript('x2')
+            }
+            referencedParameter('param1')
+            referencedParameter('param2')
+        }
+
+        then:
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['activeChoiceReferenceScriptlerParam']) {
+            children().size() == 8
+            name() == 'org.biouno.unochoice.CascadeChoiceParameter'
+            description.text() == 'Active choice param test'
+            randomName.text() =~ /choice-parameter-\d+/
+            visibleItemCount.text() == '1'
+            filterable.text() == 'true'
+            choiceType.text() == 'PT_SINGLE_SELECT'
+            with(script[0]) {
+                attributes()['class'] == 'org.biouno.unochoice.model.GroovyScript'
+                children().size() == 2
+                script.text() == 'x1'
+                fallbackScript.text() == 'x2'
+            }
+            referencedParameters.text() == 'param1, param2'
+        }
+    }
+
+    def 'active choice reactive reference param without options'() {
+        when:
+        context.activeChoiceReactiveReferenceParam('activeChoiceReactiveReferenceParam') {
+        }
+
+        then:
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['activeChoiceReactiveReferenceParam']) {
+            name() == 'org.biouno.unochoice.DynamicReferenceParameter'
+            children().size() == 7
+            description.text() == ''
+            randomName.text() =~ /choice-parameter-\d+/
+            visibleItemCount.text() == '1'
+            choiceType.text() == 'ET_TEXT_BOX'
+            script.text() == ''
+            referencedParameters.text() == ''
+            omitValueField.text() == 'false'
+        }
+    }
+
+    def 'active choice reactive reference param with all options and scriptler script'() {
+        when:
+        context.activeChoiceReactiveReferenceParam('activeChoiceReactiveReferenceScriptlerParam') {
+            description('Active choice reactive reference param test with scriptler script')
+            omitValueField()
+            choiceType('FORMATTED_HIDDEN_HTML')
+            scriptlerScript('scriptler-2.groovy') {
+                parameter('script-param', 'x1')
+            }
+            referencedParameter('param3')
+            referencedParameter('param4')
+        }
+
+        then:
+        context.buildParameterNodes.size() == 1
+        with(context.buildParameterNodes['activeChoiceReactiveReferenceScriptlerParam']) {
+            children().size() == 8
+            name() == 'org.biouno.unochoice.DynamicReferenceParameter'
+            description.text() == 'Active choice reactive reference param test with scriptler script'
+            randomName.text() =~ /choice-parameter-\d+/
+            visibleItemCount.text() == '1'
+            choiceType.text() == 'ET_FORMATTED_HIDDEN_HTML'
+            with(script[0]) {
+                attributes()['class'] == 'org.biouno.unochoice.model.ScriptlerScript'
+                scriptlerScriptId.text() == 'scriptler-2.groovy'
+                children().size() == 2
+                with(parameters[0]) {
+                  children().size() == 1
+                  entry[0].string[0].text() == 'script-param'
+                  entry[0].string[1].text() == 'x1'
+                }
+            }
+            referencedParameters.text() == 'param3, param4'
+        }
+    }
 }
